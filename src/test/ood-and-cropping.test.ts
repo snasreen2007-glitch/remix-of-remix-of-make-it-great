@@ -172,6 +172,60 @@ describe("Out-Of-Distribution (OOD) Non-Plant & Face Rejection", () => {
     expect(leafCheck?.pass).toBe(true);
     expect(leafCheck?.tip).not.toContain("Human face");
   });
+
+  it("strictly rejects casual person portraits with clothing and hair", () => {
+    const W = 64;
+    const H = 64;
+    const pixels = new Uint8ClampedArray(W * H * 4);
+
+    // 15% face skin, 35% black/brown hair, 50% blue/grey clothing & room
+    for (let i = 0; i < W * H; i++) {
+      const idx = i * 4;
+      if (i < W * H * 0.15) {
+        // Human face skin: R~170, G~125, B~85
+        pixels[idx] = 170 + (i % 4);
+        pixels[idx + 1] = 125 + (i % 4);
+        pixels[idx + 2] = 85 + (i % 4);
+      } else if (i < W * H * 0.50) {
+        // Dark hair / dark clothes: R~40, G~35, B~30
+        pixels[idx] = 40 + (i % 5);
+        pixels[idx + 1] = 35 + (i % 5);
+        pixels[idx + 2] = 30 + (i % 5);
+      } else {
+        // Blue shirt / room background: R~50, G~80, B~140
+        pixels[idx] = 50 + (i % 6);
+        pixels[idx + 1] = 80 + (i % 6);
+        pixels[idx + 2] = 140 + (i % 6);
+      }
+      pixels[idx + 3] = 255;
+    }
+
+    const report = assessPixels(pixels, W, H);
+    expect(report.ok).toBe(false);
+    const leafCheck = report.checks.find((c) => c.id === "leaf");
+    expect(leafCheck?.pass).toBe(false);
+    expect(leafCheck?.tip).toContain("Human face or skin detected");
+  });
+
+  it("strictly rejects wooden desks, furniture, and leather without chlorophyll", () => {
+    const W = 64;
+    const H = 64;
+    const pixels = new Uint8ClampedArray(W * H * 4);
+
+    // Brown wood grain: R~140, G~90, B~55 (brown/tan but NO leaf chlorophyll)
+    for (let i = 0; i < W * H; i++) {
+      const idx = i * 4;
+      pixels[idx] = 140 + (i % 8);
+      pixels[idx + 1] = 90 + (i % 6);
+      pixels[idx + 2] = 55 + (i % 4);
+      pixels[idx + 3] = 255;
+    }
+
+    const report = assessPixels(pixels, W, H);
+    expect(report.ok).toBe(false);
+    const leafCheck = report.checks.find((c) => c.id === "leaf");
+    expect(leafCheck?.pass).toBe(false);
+  });
 });
 
 describe("Square Viewfinder Reticle Cropping Geometry", () => {

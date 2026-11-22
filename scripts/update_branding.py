@@ -87,7 +87,10 @@ icon_512.save('public/icon-512.png', 'PNG')
 
 icon_192 = make_square_icon(192, bg_tuple)
 icon_192.save('public/icon-192.png', 'PNG')
-icon_192.save('public/apple-touch-icon.png', 'PNG')
+
+# Standard iOS Apple Touch Icon (180x180 px)
+icon_180 = make_square_icon(180, bg_tuple)
+icon_180.save('public/apple-touch-icon.png', 'PNG')
 
 # Favicon ico (multi-size: 16, 32, 48)
 icon_48 = make_square_icon(48, bg_tuple)

@@ -131,15 +131,18 @@ class VisionInferenceService(private val context: Context) {
         }
 
         val skinShare = skinCount.toFloat() / total
-        val plantShare = (foliageCount + lesionCount).toFloat() / total
+        val foliageShare = foliageCount.toFloat() / total
+        // Lesions only count towards plant tissue if accompanying genuine foliar chlorophyll
+        val validLesionShare = if (foliageShare >= 0.03f) lesionCount.toFloat() / total else 0f
+        val plantShare = foliageShare + validLesionShare
 
-        // A selfie/human face: skin dominates (> 30%) and virtually zero plant foliage (< 5%)
-        if (skinShare >= 0.30f && plantShare < 0.05f) {
+        // Human face, selfie, portrait, or person in frame: >= 6% human skin tone and < 15% green foliage
+        if (skinShare >= 0.06f && foliageShare < 0.15f) {
             return Pair(false, "REJECTED_HUMAN_FACE_OR_SKIN")
         }
 
-        // Non-plant object / background without plant tissue (< 2.0% plant tissue)
-        if (plantShare < 0.020f && skinShare < 0.20f) {
+        // Non-plant object / background without plant tissue (< 4.0% plant tissue or < 2.0% green foliage)
+        if (plantShare < 0.040f || foliageShare < 0.020f) {
             return Pair(false, "REJECTED_OOD_NON_PLANT")
         }
 

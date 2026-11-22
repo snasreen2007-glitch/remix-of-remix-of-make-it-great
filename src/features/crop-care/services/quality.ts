@@ -33,7 +33,7 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
     const yCr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
     const isYcbcrSkin = yCr >= 133 && yCr <= 173 && yCb >= 77 && yCb <= 127;
     const isKovacSkin = r > 80 && g > 35 && b > 20 && r > g && r > b && (r - g) > 15 && (r - b) > 25;
-    const isSkinPixel = isYcbcrSkin || isKovacSkin;
+    const isSkinPixel = isYcbcrSkin && isKovacSkin;
 
     if (isSkinPixel) {
       skinCount++;
@@ -103,8 +103,13 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
   const mean = count ? lapSum / count : 0;
   const sharpness = count ? lapSq / count - mean * mean : 0;
   const greenShare = green / n;
-  const lesionShare = lesion / n;
-  const plantTissueShare = (green + chlorotic + lesion + straw) / n;
+  const chloroticShare = chlorotic / n;
+  const hasBaseChlorophyll = (greenShare + chloroticShare) >= 0.03;
+  // Lesions and straw only constitute verified botanical leaf tissue when accompanied by genuine leaf chlorophyll or in genuine agricultural monochrome
+  const validLesion = hasBaseChlorophyll ? lesion : 0;
+  const validStraw = hasBaseChlorophyll ? straw : 0;
+  const plantTissueShare = (green + chlorotic + validLesion + validStraw) / n;
+  const lesionShare = validLesion / n;
   const avgChroma = sumChroma / n;
 
   let maxColorOccurrences = 0;
@@ -122,13 +127,13 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
   // Reject flat painted drywall / artificial indoor wall decor:
   const isIndoorWallDecor = topColorShare > 0.70 && greenShare < 0.22 && lesionShare < 0.05 && plantTissueShare < 0.22;
 
-  // Reject human faces and selfies (human skin presence without crop leaf tissue)
-  // A selfie fills the photo with skin (>= 28%) and has virtually zero botanical foliage (< 5%)
-  const isHumanFace = (skinCount / n) >= 0.28 && plantTissueShare < 0.05;
+  // Reject human faces, selfies, portraits, and people (human skin presence without dominant crop foliage)
+  // Any photo with >= 6% human skin tone and < 15% green foliage is a person, not a crop leaf
+  const isHumanFace = (skinCount / n) >= 0.06 && greenShare < 0.15;
 
   // Support true monochrome/black-and-white photos of leaves if they possess genuine foliar sharpness and edge contrast
   const isTrueMonochromeLeaf = (avgChroma < 1.5) && sharpness >= 20 && contrast >= 14;
-  const isMissingBotanicalFoliage = plantTissueShare < 0.015 && !isTrueMonochromeLeaf && !isHumanFace && !isCartoonOrDrawing && !isIndoorWallDecor;
+  const isMissingBotanicalFoliage = (plantTissueShare < 0.04 || (greenShare < 0.02 && chloroticShare < 0.04)) && !isTrueMonochromeLeaf && !isHumanFace && !isCartoonOrDrawing && !isIndoorWallDecor;
 
   const leafOk = !isCartoonOrDrawing && !isHumanFace && !isIndoorWallDecor && !isMissingBotanicalFoliage;
 
