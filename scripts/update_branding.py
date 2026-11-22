@@ -136,3 +136,4 @@ with open('public/favicon.svg', 'w', encoding='utf-8') as f:
     f.write(svg_favicon)
 
 print('All branding assets generated successfully!')
+

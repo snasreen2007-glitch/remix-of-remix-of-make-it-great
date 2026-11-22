@@ -1085,8 +1085,8 @@ Note: ${note || "No specific farmer notes recorded."}
                   </div>
                 </div>
                 {scan.severity && (
-                  <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold uppercase", bandColor(scan.severity.band))}>
-                    {severityLabel(scan.severity.band, lang)}
+                  <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold uppercase", bandColor[scan.severity.band])}>
+                    {severityLabel(scan.severity)}
                   </span>
                 )}
               </div>

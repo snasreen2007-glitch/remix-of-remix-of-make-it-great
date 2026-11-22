@@ -29,7 +29,21 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(OFFLINE_ROUTES).catch((e) => console.warn("Cache prefill warning:", e)))
+      .then(async (cache) => {
+        const core = ["/", "/manifest.webmanifest", "/favicon.ico", "/favicon.svg", "/logo.svg"];
+        await cache.addAll(core).catch((e) => console.warn("Core cache prefill warning:", e));
+
+        await Promise.allSettled(
+          OFFLINE_ROUTES.filter((r) => !core.includes(r)).map(async (route) => {
+            try {
+              const res = await fetch(route);
+              if (res && res.status === 200) {
+                await cache.put(route, res);
+              }
+            } catch {}
+          })
+        );
+      })
       .then(() => self.skipWaiting()),
   );
 });
