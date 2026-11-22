@@ -148,8 +148,7 @@ export function HomePage() {
             ) : (
               <a
                 href={getApkDownloadUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={triggerApkDownload}
                 download="kisanai-offline-ai.apk"
                 className={cn(
                   btnSecondary,

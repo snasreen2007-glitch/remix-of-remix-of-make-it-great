@@ -203,23 +203,33 @@ class CropAssistantNativeBridge(
             val confidence = diagResult.confidence
 
             val response = JSONObject()
-            if (slug == null || confidence < 0.55) {
+            if (diagResult.isOOD || slug == null || slug == "unknown") {
                 response.put("slug", JSONObject.NULL)
                 response.put("confidence", confidence)
+                response.put("status", diagResult.status)
+                response.put("isOOD", true)
+                response.put("explanation", diagResult.explanation ?: "Specimen not recognized as agricultural foliage")
             } else {
                 response.put("slug", slug)
                 response.put("confidence", confidence)
+                response.put("status", diagResult.status)
+                response.put("category", diagResult.category)
+                if (diagResult.explanation != null) {
+                    response.put("explanation", diagResult.explanation)
+                }
 
                 // Run computer vision severity calculation if it's a disease
-                val severity = severityService.calculateSeverity(crop, slug, bitmap)
-                val sevObj = JSONObject().apply {
-                    put("affectedPercent", severity.affectedPercent)
-                    put("stage", severity.stage)
-                    put("headline", severity.headline)
-                    put("urgency", severity.urgency)
-                    put("rationale", severity.rationale)
+                if (diagResult.category == "disease") {
+                    val severity = severityService.calculateSeverity(crop, slug, bitmap)
+                    val sevObj = JSONObject().apply {
+                        put("affectedPercent", severity.affectedPercent)
+                        put("stage", severity.stage)
+                        put("headline", severity.headline)
+                        put("urgency", severity.urgency)
+                        put("rationale", severity.rationale)
+                    }
+                    response.put("severity", sevObj)
                 }
-                response.put("severity", sevObj)
             }
 
             response.toString()

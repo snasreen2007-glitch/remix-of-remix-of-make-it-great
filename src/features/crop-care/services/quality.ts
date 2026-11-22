@@ -4,6 +4,7 @@ import type { QualityReport } from "./types";
 export function assessPixels(data: Uint8ClampedArray, width: number, height: number): QualityReport {
   const gray = new Float32Array(width * height);
   let sum = 0;
+  let sumChroma = 0;
   let green = 0;
   let chlorotic = 0;
   let lesion = 0;
@@ -38,8 +39,9 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
       skinCount++;
     }
 
-    // Neutral grey check (walls, paper, tables, floor tiles)
+    // Neutral grey check (walls, paper, tables, floor tiles, grey furniture)
     const chromaRange = Math.max(r, g, b) - Math.min(r, g, b);
+    sumChroma += chromaRange;
     const isStrictNeutralGrey =
       (chromaRange <= 12) ||
       (r > 160 && g > 160 && b > 150 && chromaRange <= 18);
@@ -103,6 +105,7 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
   const greenShare = green / n;
   const lesionShare = lesion / n;
   const plantTissueShare = (green + chlorotic + lesion + straw) / n;
+  const avgChroma = sumChroma / n;
 
   let maxColorOccurrences = 0;
   for (const occ of colorMap.values()) {
@@ -113,15 +116,19 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
 
   // Reject flat vector art, drawings, cartoons (only when saturated neon flat art without botanical tissue):
   const isCartoonOrDrawing =
-    (uniqueColorCount < 8 && topColorShare > 0.95 && plantTissueShare < 0.010) ||
-    ((neonCount / n) > 0.25 && plantTissueShare < 0.010);
+    (uniqueColorCount < 6 && topColorShare > 0.96 && plantTissueShare < 0.005) ||
+    ((neonCount / n) > 0.35 && plantTissueShare < 0.005);
 
   // Reject flat painted drywall / artificial indoor wall decor:
-  const isIndoorWallDecor = topColorShare > 0.72 && greenShare < 0.18 && lesionShare < 0.04;
+  const isIndoorWallDecor = topColorShare > 0.70 && greenShare < 0.22 && lesionShare < 0.05 && plantTissueShare < 0.22;
 
-  // Reject human faces (only when human skin dominates > 45% and virtually no crop foliage or lesion tissue is present)
-  const isHumanFace = (skinCount / n) > 0.45 && greenShare < 0.03 && lesionShare < 0.03;
-  const isMissingBotanicalFoliage = plantTissueShare < 0.015 && !isHumanFace && !isCartoonOrDrawing && !isIndoorWallDecor;
+  // Reject human faces and selfies (human skin presence without crop leaf tissue)
+  // A selfie fills the photo with skin (>= 28%) and has virtually zero botanical foliage (< 5%)
+  const isHumanFace = (skinCount / n) >= 0.28 && plantTissueShare < 0.05;
+
+  // Support true monochrome/black-and-white photos of leaves if they possess genuine foliar sharpness and edge contrast
+  const isTrueMonochromeLeaf = (avgChroma < 1.5) && sharpness >= 20 && contrast >= 14;
+  const isMissingBotanicalFoliage = plantTissueShare < 0.015 && !isTrueMonochromeLeaf && !isHumanFace && !isCartoonOrDrawing && !isIndoorWallDecor;
 
   const leafOk = !isCartoonOrDrawing && !isHumanFace && !isIndoorWallDecor && !isMissingBotanicalFoliage;
 
@@ -131,11 +138,11 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
   const suitable = sharpOk && lightOk && subjectOk && leafOk;
 
   const leafTip = isHumanFace
-    ? "Human face or skin detected. Please photograph a crop leaf, not people or faces."
+    ? "Human face or skin detected. Please photograph an agricultural crop leaf, not people or faces."
     : isIndoorWallDecor
     ? "Indoor wall decoration or artificial object detected. Please photograph a living crop leaf in the field."
     : isCartoonOrDrawing
-    ? "Drawing or cartoon detected. Please photograph a real crop leaf in your field."
+    ? "Digital drawing or illustration detected. Please photograph a real crop leaf in your field."
     : isMissingBotanicalFoliage
     ? "No agricultural crop leaf detected. Please photograph a rice or chilli plant leaf."
     : "Real botanical foliage detected.";

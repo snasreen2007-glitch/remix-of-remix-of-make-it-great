@@ -197,27 +197,48 @@ async function runOnnxInference(
 
     const classes = crop === "rice"
       ? [
-          "rice-blast",
-          "rice-blast",
-          "brown-spot",
-          "bacterial-leaf-blight",
-          "bacterial-leaf-streak",
-          "tungro",
-          "yellow-stem-borer",
-          "hispa",
-          "downy-mildew",
-          "rice-healthy",
-          "unknown",
+          "rice-blast",            // 0 -> blast
+          "brown-spot",            // 1 -> brown_spot
+          "bacterial-leaf-blight", // 2 -> bacterial_leaf_blight
+          "tungro",                // 3 -> tungro
+          "hispa",                 // 4 -> hispa
+          "leaf-folder",           // 5 -> leaf_roller
+          "yellow-stem-borer",     // 6 -> stem_borer
+          "downy-mildew",          // 7 -> downy_mildew
+          "bacterial-leaf-streak", // 8 -> bacterial_leaf_streak
+          "rice-healthy",          // 9 -> normal
         ]
       : [
-          "leaf-curl",
-          "cercospora-leaf-spot",
-          "bacterial-leaf-spot",
-          "powdery-mildew",
-          "anthracnose",
-          "chilli-healthy",
-          "unknown",
+          "leaf-curl",             // 0
+          "cercospora-leaf-spot",  // 1
+          "bacterial-leaf-spot",   // 2
+          "powdery-mildew",        // 3
+          "anthracnose",           // 4
+          "thrips",                // 5
+          "mites",                 // 6
+          "whitefly",              // 7
+          "aphids",                // 8
+          "chilli-healthy",        // 9
+          "unknown",               // 10
         ];
+
+    // Check if the deep model predicted the OOD unknown class
+    let maxIdx = 0;
+    let maxProb = probs[0] || 0;
+    for (let k = 1; k < probs.length; k++) {
+      if (probs[k] > maxProb) {
+        maxProb = probs[k];
+        maxIdx = k;
+      }
+    }
+
+    if (classes[maxIdx] === "unknown") {
+      return {
+        slug: "unknown",
+        confidence: Math.round(maxProb * 100) / 100,
+        candidates: [],
+      };
+    }
 
     const candidateMap = new Map<string, number>();
     for (let k = 0; k < classes.length; k++) {
@@ -458,11 +479,10 @@ export async function analyzeImageWithVision(
       const data = imgData.data;
       const totalPixels = W * H;
 
-      // Pre-flight image quality assessment
+      // Pre-flight image quality and botanical foliage gate
       const preflightQuality = assessPixels(data, W, H);
       const leafCheck = preflightQuality.checks.find((c) => c.id === "leaf");
-      // Only abort immediately on clear human faces or skin
-      if (leafCheck && !leafCheck.pass && leafCheck.tip.includes("Human face")) {
+      if (leafCheck && !leafCheck.pass) {
         return resolve({
           source: "model",
           outcome: "unknown",
@@ -472,7 +492,7 @@ export async function analyzeImageWithVision(
             lesionPixels: 0,
             affectedPercent: 0,
             isCropValid: false,
-            pattern: "rejected_human_face_or_skin",
+            pattern: leafCheck.tip || "rejected_non_leaf_or_face",
           },
         });
       }
@@ -862,8 +882,36 @@ export async function analyzeImageWithVision(
         patternName = detectedSlug.replace("-", "_");
         candidates = deepModelResult.candidates;
       }
-      // Priority 2: Client-side In-Browser Real-Field Gradient Boosted Trees (100% offline browser execution)
-      else if (hgbRes && hgbRes.confidence >= 0.42 && hgbRes.slug !== "unknown") {
+      // Priority 2: In-Browser ONNX WebAssembly Deep Convolutional Neural Network
+      if (!detectedSlug) {
+        const onnxRes = await runOnnxInference(crop, canvas);
+        if (onnxRes) {
+          if (onnxRes.slug === "unknown") {
+            return resolve({
+              source: "model",
+              outcome: "unknown",
+              confidence: onnxRes.confidence,
+              diagnostics: {
+                plantPixels,
+                lesionPixels: totalLesionPixels,
+                affectedPercent,
+                isCropValid: false,
+                pattern: "rejected_ood_non_plant_specimen",
+              },
+            });
+          }
+          if (onnxRes.confidence >= 0.25) {
+            const modeCandidate = onnxRes.candidates.find((c: any) => matchesMode(c.slug));
+            detectedSlug = modeCandidate ? modeCandidate.slug : onnxRes.slug;
+            confidence = modeCandidate ? Math.min(0.96, modeCandidate.confidence) : Math.min(0.96, onnxRes.confidence);
+            patternName = detectedSlug.replace("-", "_");
+            candidates = onnxRes.candidates;
+          }
+        }
+      }
+
+      // Priority 3: Client-side In-Browser Gradient Boosted Trees (Fallback if ONNX didn't evaluate)
+      if (!detectedSlug && hgbRes && hgbRes.confidence >= 0.42 && hgbRes.slug !== "unknown" && plantPixels >= 100) {
         const modeCandidate = hgbRes.candidates.find((c: any) => matchesMode(c.slug));
         if (modeCandidate && modeCandidate.confidence >= 0.40) {
           detectedSlug = modeCandidate.slug;
@@ -875,32 +923,25 @@ export async function analyzeImageWithVision(
           confidence = hgbRes.confidence;
           patternName = detectedSlug.replace("-", "_");
           candidates = hgbRes.candidates;
-        } else {
+        }
+      }
+
+      // Priority 4: Rice domain foliar pathology rules
+      if (!detectedSlug && crop === "rice") {
+        if (plantPixels < 120 || totalBotanicalPixels < 120) {
           return resolve({
             source: "model",
             outcome: "unknown",
-            confidence: hgbRes.confidence,
-            candidates: hgbRes.candidates,
+            confidence: 0.15,
             diagnostics: {
               plantPixels,
               lesionPixels: totalLesionPixels,
               affectedPercent,
               isCropValid: false,
-              pattern: "inconclusive_low_confidence",
+              pattern: "insufficient_crop_foliage_for_diagnosis",
             },
           });
         }
-      }
-      // Priority 3: In-Browser ONNX WebAssembly Deep Neural Network
-      else {
-        const onnxRes = await runOnnxInference(crop, canvas);
-        if (onnxRes && onnxRes.confidence >= 0.35 && onnxRes.slug !== "unknown") {
-          const modeCandidate = onnxRes.candidates.find((c: any) => matchesMode(c.slug));
-          detectedSlug = modeCandidate ? modeCandidate.slug : onnxRes.slug;
-          confidence = modeCandidate ? Math.min(0.95, modeCandidate.confidence) : Math.min(0.95, onnxRes.confidence);
-          patternName = detectedSlug.replace("-", "_");
-          candidates = onnxRes.candidates;
-        } else if (crop === "rice") {
         if (mode === "disease") {
           // Multi-class fine-grained foliar scoring incorporating real Paddy Doctor & Mendeley benchmarks
           const scores: Record<string, number> = {
@@ -1025,7 +1066,6 @@ export async function analyzeImageWithVision(
           }));
         }
       }
-    }
 
       // Calculate severity scale
       let severity: SeverityResult;

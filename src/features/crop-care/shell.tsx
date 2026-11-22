@@ -157,8 +157,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             ) : (
               <a
                 href={getApkDownloadUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={triggerApkDownload}
                 download="kisanai-offline-ai.apk"
                 title="Download KisanAI Offline Android APK (~396.6 MB)"
                 className="hidden sm:inline-flex h-10 items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3 text-xs font-bold text-primary hover:bg-primary/20 transition-all active:scale-95 shadow-xs cursor-pointer"
@@ -269,10 +268,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               ) : (
                 <a
                   href={getApkDownloadUrl()}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   download="kisanai-offline-ai.apk"
-                  onClick={() => setMobileMenuOpen(false)}
+                  onClick={(e) => {
+                    setMobileMenuOpen(false);
+                    triggerApkDownload(e);
+                  }}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-xs font-bold text-primary-foreground shadow-md hover:bg-primary/90 transition-all active:scale-95 cursor-pointer"
                 >
                   <Download className="size-4" />

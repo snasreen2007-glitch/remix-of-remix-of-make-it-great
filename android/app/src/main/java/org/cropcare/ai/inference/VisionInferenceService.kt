@@ -33,38 +33,39 @@ class VisionInferenceService(private val context: Context) {
     private var riceModule: Module? = null
     private var chilliModule: Module? = null
 
-    // Level 4 Class taxonomies matching trained Hierarchical Champion Model
-    private val riceDiseaseClasses = listOf(
-        "rice_blast_leaf",
-        "rice_blast_neck",
-        "rice_brown_spot",
-        "rice_bacterial_leaf_blight",
-        "rice_tungro",
-        "rice_healthy"
+    // 10-Class Paddy Doctor Tamil Nadu production taxonomy
+    private val riceClasses = listOf(
+        "rice-blast",            // 0 -> blast
+        "brown-spot",            // 1 -> brown_spot
+        "bacterial-leaf-blight", // 2 -> bacterial_leaf_blight
+        "tungro",                // 3 -> tungro
+        "hispa",                 // 4 -> hispa
+        "leaf-folder",           // 5 -> leaf_roller
+        "yellow-stem-borer",     // 6 -> stem_borer
+        "downy-mildew",          // 7 -> downy_mildew
+        "bacterial-leaf-streak", // 8 -> bacterial_leaf_streak
+        "rice-healthy"           // 9 -> normal
     )
 
-    private val ricePestClasses = listOf(
-        "rice_brown_planthopper",
-        "rice_yellow_stem_borer",
-        "rice_leaf_folder",
-        "rice_gall_midge"
+    // 11-Class Chilli production taxonomy with OOD 'unknown' head
+    private val chilliClasses = listOf(
+        "leaf-curl",                 // 0 -> chilli_leaf_curl
+        "cercospora-leaf-spot",      // 1 -> chilli_cercospora_leaf_spot
+        "bacterial-leaf-spot",       // 2 -> chilli_bacterial_leaf_spot
+        "powdery-mildew",            // 3 -> chilli_powdery_mildew
+        "anthracnose",               // 4 -> chilli_anthracnose_fruit_rot
+        "thrips",                    // 5 -> chilli_thrips
+        "mites",                     // 6 -> chilli_mites
+        "whitefly",                  // 7 -> chilli_whiteflies
+        "aphids",                    // 8 -> chilli_aphids
+        "chilli-healthy",            // 9 -> chilli_healthy
+        "unknown"                    // 10 -> out_of_distribution
     )
 
-    private val chilliDiseaseClasses = listOf(
-        "chilli_leaf_curl",
-        "chilli_cercospora_leaf_spot",
-        "chilli_bacterial_leaf_spot",
-        "chilli_powdery_mildew",
-        "chilli_anthracnose_fruit_rot",
-        "chilli_healthy"
-    )
-
-    private val chilliPestClasses = listOf(
-        "chilli_thrips",
-        "chilli_mites",
-        "chilli_whiteflies",
-        "chilli_aphids"
-    )
+    private val riceDiseaseClasses = riceClasses
+    private val ricePestClasses = listOf("hispa", "leaf-folder", "yellow-stem-borer")
+    private val chilliDiseaseClasses = chilliClasses
+    private val chilliPestClasses = listOf("thrips", "mites", "whitefly", "aphids")
 
     fun initialize() {
         // Attempt loading Hierarchical Champion Model (EfficientNetV2-S)
@@ -102,32 +103,46 @@ class VisionInferenceService(private val context: Context) {
         val total = pixels.size
         var skinCount = 0
         var foliageCount = 0
+        var lesionCount = 0
 
         for (p in pixels) {
             val r = (p shr 16) and 0xFF
             val g = (p shr 8) and 0xFF
             val b = p and 0xFF
 
-            // Skin detection
-            if (r > 95 && g > 40 && b > 20 && r > g && r > b && (r - g) > 15 &&
-                (maxOf(r, g, b) - minOf(r, g, b)) > 15) {
+            // Biometric skin detection (Kovac & YCbCr)
+            val isSkin = (r > 95 && g > 40 && b > 20 && r > g && r > b && (r - g) > 15 && (r - b) > 20)
+            if (isSkin) {
                 skinCount++
             }
 
-            // Green/yellow foliar chlorophyll
-            val isGreen = (g > r * 1.05) && (g > b * 1.05) && (g > 35)
-            val isYellow = (r > 90) && (g > 85) && (b < 75) && (r > b * 1.2)
+            // Green/yellow foliar chlorophyll (healthy leaves, chlorosis, senescing leaves)
+            val isGreen = (g >= 22 && g >= r * 0.88 && g > b * 1.02) ||
+                          (g > 25 && (g - r) >= 3 && (g - b) >= 4)
+            val isYellow = (r > 35 && g > 35 && (r + g) > b * 1.25 && Math.abs(r - g) < 55 && b < Math.min(r, g) * 0.90)
+            // Fungal & necrotic lesions (blast spots, brown spots, anthracnose)
+            val isLesion = (r > 24 && g > 15 && (r + g) > b * 1.15 && (r - b) >= 5 && b < Math.max(r, g) * 0.92)
+
             if (isGreen || isYellow) {
                 foliageCount++
+            } else if (isLesion) {
+                lesionCount++
             }
         }
 
-        if (skinCount.toFloat() / total > 0.10f) {
+        val skinShare = skinCount.toFloat() / total
+        val plantShare = (foliageCount + lesionCount).toFloat() / total
+
+        // A selfie/human face: skin dominates (> 30%) and virtually zero plant foliage (< 5%)
+        if (skinShare >= 0.30f && plantShare < 0.05f) {
             return Pair(false, "REJECTED_HUMAN_FACE_OR_SKIN")
         }
-        if (foliageCount.toFloat() / total < 0.12f) {
+
+        // Non-plant object / background without plant tissue (< 2.0% plant tissue)
+        if (plantShare < 0.020f && skinShare < 0.20f) {
             return Pair(false, "REJECTED_OOD_NON_PLANT")
         }
+
         return Pair(true, "VALID_FOLIAGE")
     }
 
@@ -339,13 +354,38 @@ class VisionInferenceService(private val context: Context) {
         val probs = softmax(scores)
         val bestIdx = argmax(probs)
         val conf = probs[bestIdx].toDouble()
-        val classes = if (crop == "rice") riceDiseaseClasses else chilliDiseaseClasses
+        val classes = if (crop == "rice") riceClasses else chilliClasses
         val slug = classes.getOrNull(bestIdx)
 
+        if (slug == null || slug == "unknown") {
+            return DiagnosisInferenceResult(
+                slug = null,
+                confidence = conf,
+                level = 4,
+                status = "REJECTED_OOD_NON_PLANT",
+                isOOD = true,
+                explanation = "Specimen is not recognized as a supported agricultural condition."
+            )
+        }
+
+        if (slug.endsWith("-healthy")) {
+            return DiagnosisInferenceResult(
+                slug = slug,
+                confidence = conf,
+                level = 4,
+                status = "CONFIRMED_HEALTHY",
+                category = "healthy",
+                explanation = "Specimen shows robust, healthy crop foliage."
+            )
+        }
+
+        val isPest = slug in listOf("thrips", "mites", "whitefly", "aphids", "hispa", "leaf-folder", "yellow-stem-borer")
         return DiagnosisInferenceResult(
-            slug = if (slug?.contains("healthy") == true) null else slug,
+            slug = slug,
             confidence = conf,
-            level = 4
+            level = 4,
+            status = "IDENTIFIED",
+            category = if (isPest) "pest" else "disease"
         )
     }
 

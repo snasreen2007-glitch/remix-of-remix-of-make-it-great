@@ -47,14 +47,19 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET" || !request.url.startsWith(self.location.origin)) return;
 
-  // Navigations: network-first, fall back to cached shell when offline
+  // Navigations: network-first, fall back to cached shell when offline or deep route not on server
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
-        .then((response) => {
+        .then(async (response) => {
           if (response && response.status === 200) {
             const copy = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
+            return response;
+          }
+          if (response && (response.status === 404 || response.status >= 500)) {
+            const cachedShell = await caches.match("/");
+            if (cachedShell) return cachedShell;
           }
           return response;
         })

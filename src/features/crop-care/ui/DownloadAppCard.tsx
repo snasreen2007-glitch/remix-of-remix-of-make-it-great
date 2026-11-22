@@ -26,13 +26,12 @@ export function getApkDownloadUrl(): string {
 }
 
 export function triggerApkDownload(e?: React.MouseEvent) {
+  if (e) {
+    e.preventDefault();
+  }
   const url = getApkDownloadUrl();
   if (typeof window !== "undefined") {
-    try {
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch {
-      window.location.href = url;
-    }
+    window.location.href = url;
   }
 }
 
@@ -136,8 +135,7 @@ export function DownloadAppCard({ className }: { className?: string }) {
           ) : (
             <a
               href={getApkDownloadUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={triggerApkDownload}
               download="kisanai-offline-ai.apk"
               className="inline-flex items-center justify-center gap-2.5 rounded-2xl bg-primary px-6 py-3.5 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 active:scale-95 transition-all cursor-pointer"
             >

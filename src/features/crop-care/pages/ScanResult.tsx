@@ -430,6 +430,10 @@ Note: ${note || "No specific farmer notes recorded."}
                         <p className="text-xs text-rose-600/90 dark:text-rose-400/90 font-medium pt-1">
                           💡 {firstFailTip}
                         </p>
+                      ) : scan.diagnostics?.pattern ? (
+                        <p className="text-xs text-rose-600/90 dark:text-rose-400/90 font-medium pt-1">
+                          💡 {String(scan.diagnostics.pattern).replace(/_/g, " ")}
+                        </p>
                       ) : null}
                     </>
                   );

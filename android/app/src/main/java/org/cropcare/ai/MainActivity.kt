@@ -87,43 +87,6 @@ class MainActivity : AppCompatActivity() {
             .setDomain("appassets.androidplatform.net")
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .addPathHandler("/dist/", WebViewAssetLoader.AssetsPathHandler(this))
-            .addPathHandler("/", object : WebViewAssetLoader.PathHandler {
-                override fun handle(path: String): WebResourceResponse? {
-                    return try {
-                        val last = path.substringAfterLast("/")
-                        val assetPath = if (path.isEmpty() || path == "/" || path == "index.html" || !last.contains(".")) {
-                            "dist/index.html"
-                        } else {
-                            "dist/" + path.removePrefix("/")
-                        }
-                        val mimeType = when {
-                            assetPath.endsWith(".html") -> "text/html"
-                            assetPath.endsWith(".js") || assetPath.endsWith(".mjs") -> "application/javascript"
-                            assetPath.endsWith(".css") -> "text/css"
-                            assetPath.endsWith(".json") -> "application/json"
-                            assetPath.endsWith(".png") -> "image/png"
-                            assetPath.endsWith(".jpg") || assetPath.endsWith(".jpeg") -> "image/jpeg"
-                            assetPath.endsWith(".svg") -> "image/svg+xml"
-                            assetPath.endsWith(".wasm") -> "application/wasm"
-                            else -> "application/octet-stream"
-                        }
-                        WebResourceResponse(mimeType, "UTF-8", assets.open(assetPath)).apply {
-                            responseHeaders = mapOf(
-                                "Access-Control-Allow-Origin" to "*",
-                                "Cache-Control" to "no-cache"
-                            )
-                        }
-                    } catch (_: Exception) {
-                        try {
-                            WebResourceResponse("text/html", "UTF-8", assets.open("dist/index.html")).apply {
-                                responseHeaders = mapOf("Access-Control-Allow-Origin" to "*")
-                            }
-                        } catch (_: Exception) {
-                            null
-                        }
-                    }
-                }
-            })
             .build()
 
         webView.settings.apply {
@@ -262,13 +225,21 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // 3. Fallback: if asset not found on virtual domain, return SPA index.html so navigation never breaks
-                Log.w("MainActivity", "Virtual asset not found: $path, serving dist/index.html")
-                return try {
-                    val stream = assets.open("dist/index.html")
-                    WebResourceResponse("text/html", "UTF-8", 200, "OK", defaultHeaders, stream)
-                } catch (fallbackEx: Exception) {
-                    WebResourceResponse("text/plain", "UTF-8", 200, "OK", defaultHeaders, java.io.ByteArrayInputStream("KisanAI Offline".toByteArray()))
+                // 3. Fallback: if asset not found on virtual domain
+                Log.w("MainActivity", "Virtual asset not found: $path, providing fallback")
+                return if (lastSegment.endsWith(".png") || lastSegment.endsWith(".jpg") || lastSegment.endsWith(".jpeg") || lastSegment.endsWith(".ico")) {
+                    val transparentPixel = android.util.Base64.decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", android.util.Base64.DEFAULT)
+                    WebResourceResponse("image/png", "UTF-8", 200, "OK", defaultHeaders, java.io.ByteArrayInputStream(transparentPixel))
+                } else if (lastSegment.endsWith(".svg")) {
+                    val dummySvg = "<svg xmlns='http://www.w3.org/2000/svg'></svg>".toByteArray()
+                    WebResourceResponse("image/svg+xml", "UTF-8", 200, "OK", defaultHeaders, java.io.ByteArrayInputStream(dummySvg))
+                } else {
+                    try {
+                        val stream = assets.open("dist/index.html")
+                        WebResourceResponse("text/html", "UTF-8", 200, "OK", defaultHeaders, stream)
+                    } catch (fallbackEx: Exception) {
+                        WebResourceResponse("text/plain", "UTF-8", 200, "OK", defaultHeaders, java.io.ByteArrayInputStream("KisanAI Offline".toByteArray()))
+                    }
                 }
             }
 
@@ -291,10 +262,11 @@ class MainActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     Log.e("MainActivity", "Error in shouldInterceptRequest", e)
                     try {
-                        WebResourceResponse("text/html", "UTF-8", assets.open("dist/index.html")).apply {
-                            responseHeaders = mapOf("Access-Control-Allow-Origin" to "*")
-                        }
-                    } catch (_: Exception) { null }
+                        val defaultHeaders = mapOf("Access-Control-Allow-Origin" to "*")
+                        WebResourceResponse("text/html", "UTF-8", 200, "OK", defaultHeaders, assets.open("dist/index.html"))
+                    } catch (_: Exception) {
+                        WebResourceResponse("text/plain", "UTF-8", 200, "OK", mapOf("Access-Control-Allow-Origin" to "*"), java.io.ByteArrayInputStream("KisanAI Offline Error".toByteArray()))
+                    }
                 }
             }
 
@@ -313,10 +285,11 @@ class MainActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     Log.e("MainActivity", "Error in legacy shouldInterceptRequest", e)
                     try {
-                        WebResourceResponse("text/html", "UTF-8", assets.open("dist/index.html")).apply {
-                            responseHeaders = mapOf("Access-Control-Allow-Origin" to "*")
-                        }
-                    } catch (_: Exception) { null }
+                        val defaultHeaders = mapOf("Access-Control-Allow-Origin" to "*")
+                        WebResourceResponse("text/html", "UTF-8", 200, "OK", defaultHeaders, assets.open("dist/index.html"))
+                    } catch (_: Exception) {
+                        WebResourceResponse("text/plain", "UTF-8", 200, "OK", mapOf("Access-Control-Allow-Origin" to "*"), java.io.ByteArrayInputStream("KisanAI Offline Error".toByteArray()))
+                    }
                 }
             }
 
