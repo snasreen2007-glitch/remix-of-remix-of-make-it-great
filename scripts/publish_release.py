@@ -4,7 +4,25 @@ import json
 import urllib.request
 import ssl
 
-TOKEN = "REDACTED"
+TOKEN = os.environ.get("GITHUB_TOKEN") or (sys.argv[1] if len(sys.argv) > 1 else "")
+
+if not TOKEN:
+    print("=" * 60)
+    print("GITHUB TOKEN REQUIRED")
+    print("=" * 60)
+    print("To publish or replace the APK in GitHub Releases, a token is needed:")
+    print("1. Visit: https://github.com/settings/tokens")
+    print("2. Generate a token (classic) with 'repo' scope checked.")
+    print("3. Run: python scripts/publish_release.py <your_github_token>")
+    print("=" * 60)
+    try:
+        TOKEN = input("Enter GitHub Personal Access Token: ").strip()
+    except Exception:
+        pass
+
+if not TOKEN:
+    print("Error: No GitHub token provided. Exiting.")
+    sys.exit(1)
 REPO = "Ayubshaik01/remix-of-remix-of-make-it-great"
 TAG = "v1.0.0"
 APK_PATH = r"android\app\build\outputs\apk\release\app-release.apk"
@@ -104,3 +122,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
