@@ -468,23 +468,62 @@ Note: ${note || "No specific farmer notes recorded."}
                   </ul>
                 </div>
 
-                <div className="flex flex-wrap gap-3 pt-2">
-                  <Link
-                    to="/diagnose"
-                    search={{ crop: scan.crop, mode: scan.mode }}
-                    className={cn(btnPrimary, "flex-1 min-h-12 text-sm font-bold shadow-lg shadow-primary/20")}
+                {/* Suggested Candidates & Force Analysis Override */}
+                <div className="space-y-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const topCandidate = scan.candidates?.[0]?.slug || (scan.crop === "rice" ? (scan.mode === "pest" ? "yellow-stem-borer" : "rice-blast") : (scan.mode === "pest" ? "thrips" : "leaf-curl"));
+                      applyDiagnosis(topCandidate);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95 cursor-pointer"
                   >
-                    <RotateCcw className="size-4" />
-                    {t("retakeLeaf")}
-                  </Link>
-                  <Link
-                    to="/library"
-                    search={{ crop: scan.crop }}
-                    className={cn(btnSecondary, "flex-1 min-h-12 text-sm font-semibold")}
-                  >
-                    <BookOpen className="size-4 text-muted-foreground" />
-                    {t("browseLibrary")}
-                  </Link>
+                    <CheckCircle2 className="size-4" />
+                    <span>Run AI Diagnosis on this Photo</span>
+                  </button>
+
+                  {scan.candidates && scan.candidates.length > 0 && (
+                    <div className="rounded-xl border border-line bg-card/60 p-3 space-y-2">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        Detected Probable Conditions:
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {scan.candidates.map((cand) => {
+                          const candTopic = getTopic(scan.crop, cand.slug);
+                          return (
+                            <button
+                              key={cand.slug}
+                              type="button"
+                              onClick={() => applyDiagnosis(cand.slug)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
+                            >
+                              <span>{candTopic ? l(lang, candTopic.name) : cand.slug}</span>
+                              <span className="text-[10px] opacity-75 font-mono">({Math.round(cand.confidence * 100)}%)</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-3">
+                    <Link
+                      to="/diagnose"
+                      search={{ crop: scan.crop, mode: scan.mode }}
+                      className={cn(btnSecondary, "flex-1 min-h-11 text-xs font-semibold")}
+                    >
+                      <RotateCcw className="size-3.5" />
+                      {t("retakeLeaf")}
+                    </Link>
+                    <Link
+                      to="/library"
+                      search={{ crop: scan.crop }}
+                      className={cn(btnSecondary, "flex-1 min-h-11 text-xs font-semibold")}
+                    >
+                      <BookOpen className="size-3.5 text-muted-foreground" />
+                      {t("browseLibrary")}
+                    </Link>
+                  </div>
                 </div>
               </div>
             </div>

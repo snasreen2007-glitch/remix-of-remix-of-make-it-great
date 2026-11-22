@@ -361,7 +361,7 @@ export function DiagnosePage() {
           outcome,
           ...(outcome === "identified" && result.topicSlug ? { topicSlug: result.topicSlug } : {}),
           ...(outcome === "identified" && result.confidence !== undefined ? { confidence: result.confidence } : { confidence: 0.12 }),
-          ...(outcome === "identified" && result.candidates ? { candidates: result.candidates } : {}),
+          ...(result.candidates ? { candidates: result.candidates } : {}),
           ...(outcome === "identified" && result.severity ? { severity: result.severity } : {}),
           ...(result.pestAnalysis ? { pestAnalysis: result.pestAnalysis } : {}),
           ...(result.nutritionAnalysis ? { nutritionAnalysis: result.nutritionAnalysis } : {}),

@@ -458,20 +458,21 @@ export async function analyzeImageWithVision(
       const data = imgData.data;
       const totalPixels = W * H;
 
-      // Pre-flight image quality and botanical crop leaf validation
+      // Pre-flight image quality assessment
       const preflightQuality = assessPixels(data, W, H);
       const leafCheck = preflightQuality.checks.find((c) => c.id === "leaf");
-      if (!leafCheck?.pass) {
+      // Only abort immediately on clear human faces or skin
+      if (leafCheck && !leafCheck.pass && leafCheck.tip.includes("Human face")) {
         return resolve({
           source: "model",
           outcome: "unknown",
-          confidence: 0.12,
+          confidence: 0.10,
           diagnostics: {
             plantPixels: 0,
             lesionPixels: 0,
             affectedPercent: 0,
             isCropValid: false,
-            pattern: leafCheck?.tip || "rejected_non_leaf_or_face",
+            pattern: "rejected_human_face_or_skin",
           },
         });
       }
@@ -637,8 +638,8 @@ export async function analyzeImageWithVision(
 
       // Guard 1: Digital flat graphic / vector art rejection (requires very low color variety AND virtually zero botanical foliage)
       const isCartoonOrClipart =
-        (uniqueColorCount < 8 && topColorDominance > 0.92 && totalBotanicalPixels / totalPixels < 0.005) ||
-        (saturatedFlatCount / totalPixels > 0.25 && totalBotanicalPixels / totalPixels < 0.005);
+        (uniqueColorCount < 4 && topColorDominance > 0.98 && totalBotanicalPixels < 8) ||
+        (saturatedFlatCount / totalPixels > 0.40 && totalBotanicalPixels < 8);
 
       if (isCartoonOrClipart) {
         return resolve({
@@ -655,8 +656,8 @@ export async function analyzeImageWithVision(
         });
       }
 
-      // Guard 2: Human Face & Skin Detection Rejection (reject only when human skin dominates and no real botanical foliage is present)
-      if (skinRatio > 0.45 && totalBotanicalPixels / totalPixels < 0.03 && foliarRatio < 0.02) {
+      // Guard 2: Human Face & Skin Detection Rejection (reject only when human skin dominates and virtually zero botanical foliage is present)
+      if (skinRatio > 0.55 && totalBotanicalPixels / totalPixels < 0.01 && foliarRatio < 0.01) {
         return resolve({
           source: "model",
           outcome: "unknown",
@@ -671,8 +672,8 @@ export async function analyzeImageWithVision(
         });
       }
 
-      // Guard 3: Reject scenes with virtually no botanical leaf foliage (faces, furniture, rooms, random objects)
-      if (totalBotanicalPixels < 80 && foliarRatio < 0.008) {
+      // Guard 3: Reject scenes with virtually no botanical leaf foliage (blank walls, completely dark/white empty frame)
+      if (totalBotanicalPixels < 15 && foliarRatio < 0.002 && (stdR < 0.02 || (foliarCount === 0 && yellowTissueCount === 0 && brownLesionCount === 0))) {
         return resolve({
           source: "model",
           outcome: "unknown",
@@ -687,9 +688,9 @@ export async function analyzeImageWithVision(
         });
       }
 
-      // Guard 4: Indoor wall decor & artificial decorative objects (flat painted drywall with low organic foliage)
-      const isIndoorWallDecor = topColorDominance > 0.68 && foliarRatio < 0.08 && ((chloroticStreakPixels + brownSpotPixels + blastAshCorePixels) / totalPixels) < 0.04;
-      if (isIndoorWallDecor) {
+      // Guard 4: Extreme non-botanical uniform surfaces (only when > 92% uniform solid color with virtually zero foliage)
+      const isExtremeUniformDecor = topColorDominance > 0.92 && foliarRatio < 0.005 && totalBotanicalPixels < 15;
+      if (isExtremeUniformDecor) {
         return resolve({
           source: "model",
           outcome: "unknown",

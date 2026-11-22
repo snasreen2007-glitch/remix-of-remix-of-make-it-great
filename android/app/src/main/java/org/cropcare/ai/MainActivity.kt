@@ -199,16 +199,22 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClientCompat() {
             private fun handleVirtualAssetRequest(uri: Uri): WebResourceResponse {
                 val path = uri.path ?: "/"
+                val defaultHeaders = mapOf(
+                    "Access-Control-Allow-Origin" to "*",
+                    "Access-Control-Allow-Methods" to "GET, POST, OPTIONS",
+                    "Access-Control-Allow-Headers" to "*",
+                    "Cache-Control" to "no-cache"
+                )
 
                 // 1. Any navigation route without a file extension, root "/", or index.html is an SPA route: serve dist/index.html
                 val lastSegment = path.substringAfterLast("/")
-                if (path == "/" || path.isEmpty() || path == "/index.html" || !lastSegment.contains(".")) {
+                if (path == "/" || path.isEmpty() || path == "/index.html" || path.endsWith("/index.html") || !lastSegment.contains(".")) {
                     return try {
                         val stream = assets.open("dist/index.html")
-                        WebResourceResponse("text/html", "UTF-8", stream)
+                        WebResourceResponse("text/html", "UTF-8", 200, "OK", defaultHeaders, stream)
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error serving SPA index.html for path: $path", e)
-                        WebResourceResponse("text/plain", "UTF-8", java.io.ByteArrayInputStream("KisanAI Local Bundle Error".toByteArray()))
+                        WebResourceResponse("text/plain", "UTF-8", 200, "OK", defaultHeaders, java.io.ByteArrayInputStream("KisanAI Local Bundle Error".toByteArray()))
                     }
                 }
 
@@ -241,7 +247,7 @@ class MainActivity : AppCompatActivity() {
                             cand.endsWith(".html") -> "text/html"
                             cand.endsWith(".js") || cand.endsWith(".mjs") -> "application/javascript"
                             cand.endsWith(".css") -> "text/css"
-                            cand.endsWith(".json") -> "application/json"
+                            cand.endsWith(".json") || cand.endsWith(".webmanifest") -> "application/json"
                             cand.endsWith(".png") -> "image/png"
                             cand.endsWith(".jpg") || cand.endsWith(".jpeg") -> "image/jpeg"
                             cand.endsWith(".svg") -> "image/svg+xml"
@@ -250,7 +256,7 @@ class MainActivity : AppCompatActivity() {
                             cand.endsWith(".pt") || cand.endsWith(".bin") -> "application/octet-stream"
                             else -> "application/octet-stream"
                         }
-                        return WebResourceResponse(mimeType, "UTF-8", stream)
+                        return WebResourceResponse(mimeType, "UTF-8", 200, "OK", defaultHeaders, stream)
                     } catch (_: Exception) {
                         // continue trying candidates
                     }
@@ -260,9 +266,9 @@ class MainActivity : AppCompatActivity() {
                 Log.w("MainActivity", "Virtual asset not found: $path, serving dist/index.html")
                 return try {
                     val stream = assets.open("dist/index.html")
-                    WebResourceResponse("text/html", "UTF-8", stream)
+                    WebResourceResponse("text/html", "UTF-8", 200, "OK", defaultHeaders, stream)
                 } catch (fallbackEx: Exception) {
-                    WebResourceResponse("text/plain", "UTF-8", java.io.ByteArrayInputStream("KisanAI Offline".toByteArray()))
+                    WebResourceResponse("text/plain", "UTF-8", 200, "OK", defaultHeaders, java.io.ByteArrayInputStream("KisanAI Offline".toByteArray()))
                 }
             }
 

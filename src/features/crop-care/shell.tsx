@@ -39,14 +39,18 @@ export function Logo({ compact }: { compact?: boolean }) {
   const { t } = useCropCare();
   return (
     <Link to="/" className="flex min-w-0 items-center gap-2.5" aria-label={t("appName")}>
-      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-[0_6px_20px_-6px] shadow-emerald-500/40">
-        <Leaf className="size-5" strokeWidth={2.4} />
-      </span>
+      <img
+        src="/icon-192.png"
+        alt="KisanAI"
+        className="size-9 shrink-0 rounded-xl object-contain shadow-xs border border-line bg-[#eae6db]"
+      />
       {!compact && (
-        <span className="truncate text-base font-extrabold leading-tight tracking-tight text-foreground">
-          Kisan<span className="text-primary">AI</span>
-          <span className="block text-[9px] font-bold uppercase tracking-[0.18em] text-primary">
-            Offline Vision &amp; LLM
+        <span className="truncate leading-tight tracking-tight">
+          <span className="block text-base font-bold font-serif tracking-wide text-foreground">
+            KISAN AI
+          </span>
+          <span className="block text-[8px] font-bold uppercase tracking-[0.14em] text-[#c57833] dark:text-amber-400">
+            Smarter Ways, Richer Harvests
           </span>
         </span>
       )}

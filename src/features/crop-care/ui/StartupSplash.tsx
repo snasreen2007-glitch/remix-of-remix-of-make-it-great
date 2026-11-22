@@ -55,22 +55,24 @@ export function StartupSplash() {
       <div className="flex flex-col items-center max-w-sm px-6 text-center space-y-6 animate-in fade-in zoom-in-95 duration-300">
         {/* Animated Glowing Logo */}
         <div className="relative">
-          <div className="absolute -inset-4 rounded-full bg-primary/20 blur-xl animate-pulse" />
-          <div className="relative grid size-20 place-items-center rounded-3xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-[0_10px_35px_-8px] shadow-emerald-500/50">
-            <Leaf className="size-10 transition-transform animate-bounce duration-1000" strokeWidth={2.4} />
-          </div>
+          <div className="absolute -inset-4 rounded-full bg-amber-500/20 blur-xl animate-pulse" />
+          <img
+            src="/icon-192.png"
+            alt="KisanAI"
+            className="relative size-20 rounded-3xl object-contain shadow-[0_10px_35px_-8px] shadow-emerald-950/50 bg-[#eae6db] p-1.5"
+          />
         </div>
 
         {/* Brand Title */}
         <div className="space-y-1.5">
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-            Kisan<span className="text-primary">AI</span>
+          <h1 className="text-3xl font-extrabold tracking-tight font-serif text-foreground">
+            KISAN <span className="text-primary">AI</span>
           </h1>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-            Offline Vision &amp; LLM
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#c57833] dark:text-amber-400">
+            Smarter Ways, Richer Harvests
           </p>
           <p className="text-xs text-muted-foreground pt-1">
-            Smart on-device crop disease intelligence
+            Offline Vision &amp; Local Agronomic Reasoning
           </p>
         </div>
 
