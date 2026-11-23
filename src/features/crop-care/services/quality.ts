@@ -5,6 +5,7 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
   const gray = new Float32Array(width * height);
   let sum = 0;
   let sumChroma = 0;
+  let sumExg = 0;
   let green = 0;
   let chlorotic = 0;
   let lesion = 0;
@@ -28,16 +29,21 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
       neonCount++;
     }
 
-    // Biometric human skin tone detection (YCbCr + Kovac chromatic space)
+    // Biometric human skin tone detection (YCbCr + Illumination Invariant RGB)
+    // Accurately recognizes human skin across all ethnicities (Fitzpatrick I-VI) and varied lighting
     const yCb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
     const yCr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
-    const isYcbcrSkin = yCr >= 133 && yCr <= 173 && yCb >= 77 && yCb <= 127;
-    const isKovacSkin = r > 80 && g > 35 && b > 20 && r > g && r > b && (r - g) > 15 && (r - b) > 25;
-    const isSkinPixel = isYcbcrSkin && isKovacSkin;
+    const isSkinPixel =
+      (yCr >= 132 && yCr <= 180 && yCb >= 70 && yCb <= 135) &&
+      (r >= g * 0.82) && (r > b * 1.02) && (r >= 22);
 
     if (isSkinPixel) {
       skinCount++;
     }
+
+    // Excess Green Index (ExG): living vegetative chlorophyll reflects 550nm green while absorbing red & blue
+    const exg = 2 * g - r - b;
+    sumExg += exg;
 
     // Neutral grey check (walls, paper, tables, floor tiles, grey furniture)
     const chromaRange = Math.max(r, g, b) - Math.min(r, g, b);
@@ -47,31 +53,29 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
       (r > 160 && g > 160 && b > 150 && chromaRange <= 18);
 
     // Multi-spectral botanical foliage classification
-    // 1. Green foliage: dark green, bright green, olive green, or shaded canopy
+    // 1. Green foliage: genuine green chlorophyll dominance over red AND blue
     const isGreen =
       !isSkinPixel &&
       !isStrictNeutralGrey &&
-      ((g >= 20 && g >= r * 0.90 && g > b * 1.02) ||
-       (g > 24 && (g - r) >= 4 && (g - b) >= 5) ||
-       (g > 22 && g > r * 0.78 && g > b * 1.04 && (g + r) > b * 1.25 && !(r > 105 && r > g * 1.22)));
+      (g > r * 1.04 && g > b * 1.06 && exg > 8.0 && g > 30);
 
     // 2. Chlorotic, lime, & yellow foliage (natural senescence, nutritional chlorosis, or viral yellowing)
     const isChlorotic =
       !isSkinPixel &&
       !isStrictNeutralGrey &&
-      (r > 28 && g > 28 && (r + g) > b * 1.25 && Math.abs(r - g) < 55 && b < Math.min(r, g) * 0.88);
+      (r > 40 && g > 40 && (r + g) > 2.0 * b && g >= r * 0.70 && b < Math.min(r, g) * 0.85);
 
     // 3. Brown, necrotic, & fungal lesion tissue (blast spots, brown spot, cercospora lesions, anthracnose)
     const isLesion =
       !isSkinPixel &&
       !isStrictNeutralGrey &&
-      (r > 24 && g > 12 && (r + g) > b * 1.15 && (r - b) >= 5 && b < Math.max(r, g) * 0.92);
+      (r > 35 && g > 20 && (r + g) > b * 1.25 && (r - b) >= 10 && b < Math.max(r, g) * 0.88);
 
     // 4. Straw, tan, & desiccated leaf blade/sheath tissue
     const isStraw =
       !isSkinPixel &&
       !isStrictNeutralGrey &&
-      (r > 32 && g > 24 && (r + g) > b * 1.20 && Math.abs(r - g) < 55 && (r - b) >= 5 && b < Math.max(r, g) * 0.92);
+      (r > 45 && g > 35 && (r + g) > b * 1.30 && Math.abs(r - g) < 40 && (r - b) >= 12 && b < Math.max(r, g) * 0.85);
 
     if (isGreen) {
       green++;
@@ -104,7 +108,12 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
   const sharpness = count ? lapSq / count - mean * mean : 0;
   const greenShare = green / n;
   const chloroticShare = chlorotic / n;
-  const hasBaseChlorophyll = (greenShare + chloroticShare) >= 0.03;
+  const foliageShare = greenShare + chloroticShare;
+  const meanExg = sumExg / n;
+  const skinShare = skinCount / n;
+
+  // Real leaf tissue requires genuine chlorophyll presence (green or chlorotic foliage)
+  const hasBaseChlorophyll = foliageShare >= 0.08 || (foliageShare >= 0.04 && meanExg >= 10.0);
   // Lesions and straw only constitute verified botanical leaf tissue when accompanied by genuine leaf chlorophyll or in genuine agricultural monochrome
   const validLesion = hasBaseChlorophyll ? lesion : 0;
   const validStraw = hasBaseChlorophyll ? straw : 0;
@@ -129,11 +138,11 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
   const isIndoorWallDecor = topColorShare > 0.65 && plantTissueShare < 0.15;
 
   // Reject human faces, selfies, portraits, and people (human skin presence without dominant crop foliage)
-  const isHumanFace = (skinCount / n) >= 0.05 && greenShare < 0.18;
+  const isHumanFace = skinShare >= 0.035 && foliageShare < 0.18;
 
   // Support true monochrome/black-and-white photos of leaves if they possess genuine foliar sharpness and edge contrast
   const isTrueMonochromeLeaf = (avgChroma < 1.5) && sharpness >= 20 && contrast >= 14;
-  const isMissingBotanicalFoliage = (plantTissueShare < 0.08) && !isTrueMonochromeLeaf && !isHumanFace && !isCartoonOrDrawing && !isIndoorWallDecor;
+  const isMissingBotanicalFoliage = (foliageShare < 0.08 && meanExg < 6.0) && !isTrueMonochromeLeaf && !isHumanFace && !isCartoonOrDrawing && !isIndoorWallDecor;
 
   const leafOk = !isCartoonOrDrawing && !isHumanFace && !isIndoorWallDecor && !isMissingBotanicalFoliage;
 

@@ -515,6 +515,7 @@ export async function analyzeImageWithVision(
       // Statistics for global channel distribution
       let sumR = 0, sumG = 0, sumB = 0;
       let sumDiffRG = 0;
+      let sumExg = 0;
       for (let i = 0; i < totalPixels; i++) {
         const r = data[i * 4]! / 255.0;
         const g = data[i * 4 + 1]! / 255.0;
@@ -599,24 +600,34 @@ export async function analyzeImageWithVision(
             saturatedFlatCount++;
           }
 
-          // Foliar & Lesion visual masks (evaluated before skin to protect diseased spots)
-          const isChloroticStreak = (h >= 32 && h <= 72 && s >= 0.15 && v >= 0.25);
-          const isBrownLesion = ((h <= 45 || h >= 310) && s >= 0.12 && v >= 0.08 && v <= 0.80 && (r8 > b8 * 1.08));
-          const isAshCore = (s <= 0.35 && v >= 0.25 && v <= 0.88 && (r8 > 45 && g8 > 45));
-          const isPowdery = (v >= 0.72 && s <= 0.22);
-          const isOrangeDiscoloration = (h >= 18 && h <= 46 && s >= 0.30 && v >= 0.30);
-          const isLesion = isChloroticStreak || isBrownLesion || isAshCore || isPowdery || isOrangeDiscoloration;
+          // Biometric human skin tone detection (YCbCr + Illumination Invariant RGB)
+          // Accurately recognizes human skin across all ethnicities (Fitzpatrick I-VI) and varied lighting
+          const yCb = 128 - 0.168736 * r8 - 0.331264 * g8 + 0.5 * b8;
+          const yCr = 128 + 0.5 * r8 - 0.418688 * g8 - 0.081312 * b8;
+          const isSkin =
+            (yCr >= 132 && yCr <= 180 && yCb >= 70 && yCb <= 135) &&
+            (r8 >= g8 * 0.82) && (r8 > b8 * 1.02) && (r8 >= 22);
 
-          const isPureGreen = (h >= 40 && h <= 180 && s >= 0.08 && v >= 0.08 && g8 > b8 * 1.02);
-          const isChloroticLeaf = (h >= 30 && h <= 80 && s >= 0.12 && v >= 0.12 && g8 >= r8 * 0.60);
+          if (isSkin) skinPixels++;
+
+          const exg = 2 * g8 - r8 - b8;
+          sumExg += exg;
+
+          // Living plant green requires genuine green chlorophyll dominance over red AND blue
+          const isPureGreen = !isSkin && (g8 > r8 * 1.04 && g8 > b8 * 1.06 && exg > 8 && g8 > 30);
+          const isChloroticLeaf = !isSkin && (r8 > 40 && g8 > 40 && (r8 + g8) > 2.0 * b8 && g8 >= r8 * 0.70 && b8 < Math.min(r8, g8) * 0.85);
           const isFoliage = isPureGreen || isChloroticLeaf;
 
           if (isPureGreen) pureFoliageCount++;
           if (isChloroticLeaf) chloroticCount++;
 
-          // Biometric human skin tone detection (evaluated ONLY on non-foliage and non-lesion pixels)
-          const isSkin = !isFoliage && !isLesion && (r8 > 100 && g8 > 45 && b8 > 25 && r8 > g8 && r8 > b8 && (r8 - g8) > 30 && (r8 - b8) > 45);
-          if (isSkin) skinPixels++;
+          // Foliar Lesion visual masks (evaluated ONLY on genuine non-skin pixels)
+          const isChloroticStreak = !isSkin && (h >= 32 && h <= 72 && s >= 0.15 && v >= 0.25);
+          const isBrownLesion = !isSkin && ((h <= 45 || h >= 310) && s >= 0.12 && v >= 0.08 && v <= 0.80 && (r8 > b8 * 1.08));
+          const isAshCore = !isSkin && (s <= 0.35 && v >= 0.25 && v <= 0.88 && (r8 > 45 && g8 > 45));
+          const isPowdery = !isSkin && (v >= 0.72 && s <= 0.22);
+          const isOrangeDiscoloration = !isSkin && (h >= 18 && h <= 46 && s >= 0.30 && v >= 0.30);
+          const isLesion = !isSkin && (isChloroticStreak || isBrownLesion || isAshCore || isPowdery || isOrangeDiscoloration);
 
           if (isFoliage) {
             plantPixels++;
@@ -653,13 +664,14 @@ export async function analyzeImageWithVision(
       const uniqueColorCount = colorHistogram.size;
       const totalBotanicalPixels = foliarCount + yellowTissueCount + brownLesionCount + ashCoreCount + pureFoliageCount + chloroticCount;
       const totalFoliarChlorophyll = pureFoliageCount + chloroticCount;
+      const meanExg = sumExg / totalPixels;
       const skinRatio = skinPixels / totalPixels;
       const foliarRatio = totalFoliarChlorophyll / totalPixels;
 
-      // Guard 1: Digital flat graphic / vector art rejection (requires very low color variety AND virtually zero botanical foliage)
+      // Guard 1: Digital flat graphic / vector art rejection (requires very low color variety OR high flat color dominance)
       const isCartoonOrClipart =
-        (uniqueColorCount < 4 && topColorDominance > 0.98 && totalBotanicalPixels < 8) ||
-        (saturatedFlatCount / totalPixels > 0.40 && totalBotanicalPixels < 8);
+        (uniqueColorCount < 80 && (topColorDominance > 0.45 || foliarRatio < 0.08)) ||
+        (saturatedFlatCount / totalPixels > 0.05 && foliarRatio < 0.15);
 
       if (isCartoonOrClipart) {
         return resolve({
@@ -676,8 +688,8 @@ export async function analyzeImageWithVision(
         });
       }
 
-      // Guard 2: Human Face & Skin Detection Rejection (reject when human skin is present without genuine crop foliage)
-      if (skinRatio >= 0.06 && foliarRatio < 0.15) {
+      // Guard 2: Human Face & Skin Detection Rejection (reject when human skin is present without dominant genuine crop foliage)
+      if (skinRatio >= 0.035 && foliarRatio < 0.18) {
         return resolve({
           source: "model",
           outcome: "unknown",
@@ -693,7 +705,7 @@ export async function analyzeImageWithVision(
       }
 
       // Guard 3: Reject scenes with virtually no botanical leaf foliage (blank walls, non-plant objects, room, furniture)
-      if (foliarRatio < 0.04 && totalFoliarChlorophyll < (totalPixels * 0.04)) {
+      if (foliarRatio < 0.08 && meanExg < 6.0) {
         return resolve({
           source: "model",
           outcome: "unknown",
@@ -708,8 +720,8 @@ export async function analyzeImageWithVision(
         });
       }
 
-      // Guard 4: Extreme non-botanical uniform surfaces (only when > 92% uniform solid color with virtually zero foliage)
-      const isExtremeUniformDecor = topColorDominance > 0.92 && foliarRatio < 0.005 && totalBotanicalPixels < 15;
+      // Guard 4: Extreme non-botanical uniform surfaces (walls, paper, tables, floor tiles)
+      const isExtremeUniformDecor = (topColorDominance > 0.65 && foliarRatio < 0.15) || (topColorDominance > 0.92 && foliarRatio < 0.005);
       if (isExtremeUniformDecor) {
         return resolve({
           source: "model",
@@ -858,8 +870,23 @@ export async function analyzeImageWithVision(
           const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
           const maxSc = sorted[0]?.[1] ?? 0;
 
-          if (maxSc < 8 && totalLesionPixels < 15) {
-            if (plantPixels > 250) {
+          if (plantPixels < 350 || foliarRatio < 0.06) {
+            return resolve({
+              source: "model",
+              outcome: "unknown",
+              confidence: 0.15,
+              diagnostics: {
+                plantPixels,
+                lesionPixels: totalLesionPixels,
+                affectedPercent,
+                isCropValid: false,
+                pattern: "insufficient_foliar_evidence",
+              },
+            });
+          }
+
+          if (maxSc < 12 && totalLesionPixels < 25) {
+            if (plantPixels > 500 && healthyRatio >= 0.65) {
               return resolve({
                 source: "model",
                 outcome: "identified",

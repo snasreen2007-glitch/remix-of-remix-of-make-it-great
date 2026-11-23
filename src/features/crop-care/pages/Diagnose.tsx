@@ -349,9 +349,9 @@ export function DiagnosePage() {
       setTimeout(() => {
         // Enforce strict leaf validation: reject non-leaves, drawings, human faces, and OOD objects
         const leafCheck = report?.checks?.find((c) => c.id === "leaf");
-        const isNonLeaf = leafCheck ? !leafCheck.pass : false;
-        const isOOD = result.outcome === "unknown" || result.topicSlug === "unknown";
-        const outcome = (!isNonLeaf && !isOOD && result.outcome === "identified") ? "identified" : "unknown";
+        const isNonLeaf = leafCheck ? !leafCheck.pass : (result.diagnostics?.isCropValid === false);
+        const isOOD = result.outcome === "unknown" || result.topicSlug === "unknown" || result.diagnostics?.isCropValid === false;
+        const outcome = (!isNonLeaf && !isOOD && result.outcome === "identified" && Boolean(result.topicSlug)) ? "identified" : "unknown";
 
         const scan: Scan = {
           id: newId(),

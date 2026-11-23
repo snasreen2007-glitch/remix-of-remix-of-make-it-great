@@ -207,6 +207,34 @@ describe("Out-Of-Distribution (OOD) Non-Plant & Face Rejection", () => {
     expect(leafCheck?.tip).toContain("Human face or skin detected");
   });
 
+  it("strictly rejects dim/low-light indoor human faces and selfies with dark room background", () => {
+    const W = 64;
+    const H = 64;
+    const pixels = new Uint8ClampedArray(W * H * 4);
+
+    // Dim indoor lighting selfie: skin R ~ 65, G ~ 50, B ~ 42; dark room R ~ 35, G ~ 40, B ~ 48
+    for (let i = 0; i < W * H; i++) {
+      const idx = i * 4;
+      if (i < W * H * 0.45) {
+        // Human face skin in dim lighting
+        pixels[idx] = 65 + (i % 6);
+        pixels[idx + 1] = 50 + (i % 4);
+        pixels[idx + 2] = 42 + (i % 3);
+      } else {
+        // Dark room ambient background
+        pixels[idx] = 35 + (i % 5);
+        pixels[idx + 1] = 40 + (i % 5);
+        pixels[idx + 2] = 48 + (i % 6);
+      }
+      pixels[idx + 3] = 255;
+    }
+
+    const report = assessPixels(pixels, W, H);
+    expect(report.ok).toBe(false);
+    const leafCheck = report.checks.find((c) => c.id === "leaf");
+    expect(leafCheck?.pass).toBe(false);
+  });
+
   it("strictly rejects wooden desks, furniture, and leather without chlorophyll", () => {
     const W = 64;
     const H = 64;
