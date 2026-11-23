@@ -94,8 +94,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isNative, setIsNative] = useState(false);
   const bare = pathname.startsWith("/welcome") || /^\/diagnose\/[^/]+\/[^/]+/.test(pathname) || pathname.endsWith("/report");
   const isAssistant = pathname.startsWith("/assistant");
+
+  useEffect(() => {
+    setIsNative(isNativeApp());
+  }, []);
 
   useEffect(() => {
     if (ready && !settings.onboarded && !pathname.startsWith("/welcome")) void navigate({ to: "/welcome" });
@@ -147,7 +152,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <Logo />
           <div className="ml-auto flex items-center gap-1.5">
-            {isNativeApp() ? (
+            {isNative ? (
               <span
                 className="hidden sm:inline-flex h-10 items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 text-xs font-bold text-emerald-600 dark:text-emerald-400"
                 title="KisanAI Native Android App is running offline"

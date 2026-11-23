@@ -545,7 +545,7 @@ export function AssistantPage() {
       className={cn(
         "flex w-full overflow-hidden bg-canvas text-foreground",
         isFullscreen
-          ? "fixed inset-0 z-50 h-screen w-screen"
+          ? "fixed inset-0 z-50 h-[100dvh] w-screen"
           : "h-full min-h-0 flex-1"
       )}
     >

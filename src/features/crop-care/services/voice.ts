@@ -454,10 +454,20 @@ class VoiceAgentService {
       };
 
       utterance.onerror = (e) => {
-        console.warn("Web Speech utterance error:", e);
+        const errType = (e as any)?.error;
+        // Interrupted or canceled are expected lifecycle events when stopping or re-triggering speech
+        if (errType === "interrupted" || errType === "canceled") {
+          this.state.isPlaying = false;
+          this.state.isPaused = false;
+          this.state.activeText = null;
+          this.state.engine = "idle";
+          this.currentUtterance = null;
+          this.notify();
+          return;
+        }
+
         // If error is language-unavailable and we haven't tried phonetic yet, try phonetic fallback
-        if (engine === "web-vernacular" && (e as any).error === "language-unavailable") {
-          console.info("Recovering with phonetic transliteration voice fallback...");
+        if (engine === "web-vernacular" && (errType === "language-unavailable" || errType === "voice-unavailable")) {
           const phonetic = transliterateIndic(textToSpeak, originalLang);
           const fallbackVoice = this.voicesCached.find((v) => v.lang.toLowerCase().includes("in") || v.lang.toLowerCase().startsWith("en")) || this.voicesCached[0];
           this.playWebUtterance(phonetic, fallbackVoice?.lang || "en-IN", fallbackVoice, "web-phonetic", originalLang);
@@ -472,6 +482,12 @@ class VoiceAgentService {
         this.notify();
       };
 
+      if (this.synth.speaking || this.synth.pending) {
+        this.synth.cancel();
+      }
+      if (this.synth.paused) {
+        this.synth.resume();
+      }
       this.currentUtterance = utterance;
       this.synth.speak(utterance);
       return true;
