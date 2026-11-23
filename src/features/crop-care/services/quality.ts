@@ -30,12 +30,12 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
     }
 
     // Biometric human skin tone detection (YCbCr + Illumination Invariant RGB)
-    // Accurately recognizes human skin across all ethnicities (Fitzpatrick I-VI) and varied lighting
+    // Accurately recognizes human skin across all ethnicities (Fitzpatrick I-VI) and varied indoor/outdoor lighting
     const yCb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
     const yCr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
     const isSkinPixel =
-      (yCr >= 132 && yCr <= 180 && yCb >= 70 && yCb <= 135) &&
-      (r >= g * 0.82) && (r > b * 1.02) && (r >= 22);
+      (yCr >= 130 && yCr <= 185 && yCb >= 70 && yCb <= 140) &&
+      (r >= 20);
 
     if (isSkinPixel) {
       skinCount++;
@@ -138,11 +138,13 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
   const isIndoorWallDecor = topColorShare > 0.65 && plantTissueShare < 0.15;
 
   // Reject human faces, selfies, portraits, and people (human skin presence without dominant crop foliage)
-  const isHumanFace = (skinShare >= 0.035 && foliageShare < 0.18) || (skinShare >= 0.020 && foliageShare < 0.10);
+  const isHumanFace = (skinShare >= 0.04 && foliageShare < 0.20) || (skinShare >= 0.02 && foliageShare < 0.08);
 
   // Support true monochrome/black-and-white photos of leaves if they possess genuine foliar sharpness and edge contrast
   const isTrueMonochromeLeaf = (avgChroma < 1.5) && sharpness >= 20 && contrast >= 14;
-  const isMissingBotanicalFoliage = (foliageShare < 0.08 || (foliageShare < 0.15 && meanExg < 15.0)) && !isTrueMonochromeLeaf && !isHumanFace && !isCartoonOrDrawing && !isIndoorWallDecor;
+  const isMissingBotanicalFoliage =
+    ((foliageShare < 0.10 && meanExg < 8.0) || (foliageShare < 0.05) || (meanExg < 2.0 && foliageShare < 0.15)) &&
+    !isTrueMonochromeLeaf && !isHumanFace && !isCartoonOrDrawing && !isIndoorWallDecor;
 
   const leafOk = !isCartoonOrDrawing && !isHumanFace && !isIndoorWallDecor && !isMissingBotanicalFoliage;
 
@@ -151,10 +153,10 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
   const subjectOk = contrast >= 10;
   const suitable = sharpOk && lightOk && subjectOk && leafOk;
 
-  const leafTip = isHumanFace
-    ? "Human face or skin detected. Please photograph an agricultural crop leaf, not people or faces."
-    : isIndoorWallDecor
+  const leafTip = isIndoorWallDecor
     ? "Indoor wall decoration or artificial object detected. Please photograph a living crop leaf in the field."
+    : isHumanFace
+    ? "Human face or skin detected. Please photograph an agricultural crop leaf, not people or faces."
     : isCartoonOrDrawing
     ? "Digital drawing or illustration detected. Please photograph a real crop leaf in your field."
     : isMissingBotanicalFoliage

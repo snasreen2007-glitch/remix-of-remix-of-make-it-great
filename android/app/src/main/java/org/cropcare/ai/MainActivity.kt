@@ -18,10 +18,14 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.widget.FrameLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebResourceErrorCompat
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
@@ -82,6 +86,27 @@ class MainActivity : AppCompatActivity() {
 
         webView = findViewById(R.id.webView)
         nativeBridge = CropAssistantNativeBridge(this, webView)
+
+        // Ensure status bar, navigation bar, and camera cutouts are fitted safely across Android 8 through 15
+        val rootLayout = findViewById<FrameLayout>(R.id.rootLayout)
+        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, windowInsets ->
+            val insets = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            view.setPadding(insets.left, insets.top, insets.right, insets.bottom)
+
+            val density = resources.displayMetrics.density
+            val topDp = (insets.top / density).toInt()
+            val bottomDp = (insets.bottom / density).toInt()
+            webView.post {
+                webView.evaluateJavascript(
+                    "document.documentElement.style.setProperty('--sat', '${topDp}px');" +
+                    "document.documentElement.style.setProperty('--sab', '${bottomDp}px');",
+                    null
+                )
+            }
+            windowInsets
+        }
 
         val assetLoader = WebViewAssetLoader.Builder()
             .setDomain("appassets.androidplatform.net")

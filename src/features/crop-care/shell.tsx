@@ -62,7 +62,7 @@ export function Logo({ compact }: { compact?: boolean }) {
 export function LangSwitch() {
   const { settings, updateSettings } = useCropCare();
   return (
-    <label className="relative flex h-10 items-center rounded-xl border border-line bg-card px-3 text-sm font-semibold cursor-pointer">
+    <label className="relative flex h-9 sm:h-10 items-center rounded-xl border border-line bg-card px-2.5 sm:px-3 text-xs sm:text-sm font-semibold cursor-pointer">
       {langs.find((x) => x.code === settings.lang)?.short}
       <select value={settings.lang} onChange={(e) => updateSettings({ lang: e.target.value as Lang })} aria-label="Language" className="absolute inset-0 cursor-pointer opacity-0">
         {langs.map((x) => <option key={x.code} value={x.code}>{x.native}</option>)}
@@ -83,9 +83,9 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label="Toggle theme"
       title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
-      className="relative grid size-10 place-items-center rounded-xl border border-line bg-card text-muted-foreground hover:text-foreground transition-all active:scale-95"
+      className="relative grid size-9 sm:size-10 place-items-center rounded-xl border border-line bg-card text-muted-foreground hover:text-foreground transition-all active:scale-95"
     >
-      {isDark ? <Sun className="size-[18px] text-amber" /> : <Moon className="size-[18px] text-primary" />}
+      {isDark ? <Sun className="size-4 sm:size-[18px] text-amber" /> : <Moon className="size-4 sm:size-[18px] text-primary" />}
     </button>
   );
 }
@@ -140,23 +140,23 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-dvh bg-canvas text-foreground">
       <StartupSplash />
       <a href="#main" className="visually-hidden focus:not-sr-only">Skip to content</a>
-      <header className="sticky top-0 z-30 border-b border-line bg-canvas/85 backdrop-blur-lg">
-        <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-2 px-4 sm:px-6">
+      <header className="sticky top-0 z-30 border-b border-line bg-canvas/90 backdrop-blur-lg pt-[max(0px,env(safe-area-inset-top))]">
+        <div className="mx-auto flex h-14 sm:h-16 max-w-[1440px] items-center gap-2 px-3 sm:px-6">
           {/* Mobile hamburger menu toggle */}
           <button
             type="button"
             onClick={() => setMobileMenuOpen(true)}
             aria-label="Open navigation menu"
-            className="grid size-10 place-items-center rounded-xl border border-line bg-card text-muted-foreground hover:text-foreground lg:hidden transition-all active:scale-95"
+            className="grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl border border-line bg-card text-muted-foreground hover:text-foreground lg:hidden transition-all active:scale-95"
           >
             <Menu className="size-5" />
           </button>
 
           <Logo />
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="ml-auto flex items-center gap-1.5 shrink-0">
             {isNative ? (
               <span
-                className="hidden sm:inline-flex h-10 items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 text-xs font-bold text-emerald-600 dark:text-emerald-400"
+                className="hidden md:inline-flex h-9 sm:h-10 items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 text-xs font-bold text-emerald-600 dark:text-emerald-400"
                 title="KisanAI Native Android App is running offline"
               >
                 <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -168,25 +168,25 @@ export function AppShell({ children }: { children: ReactNode }) {
                 onClick={triggerApkDownload}
                 download="kisanai-offline-ai.apk"
                 title="Download KisanAI Offline Android APK (~396.6 MB)"
-                className="hidden sm:inline-flex h-10 items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3 text-xs font-bold text-primary hover:bg-primary/20 transition-all active:scale-95 shadow-xs cursor-pointer"
+                className="hidden md:inline-flex h-9 sm:h-10 items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3 text-xs font-bold text-primary hover:bg-primary/20 transition-all active:scale-95 shadow-xs cursor-pointer"
               >
                 <Download className="size-3.5" />
                 <span>{t("downloadApp")}</span>
               </a>
             )}
-            <Link to="/profile/offline" className="hidden h-10 items-center gap-2 rounded-xl border border-line bg-card px-3 text-xs font-semibold text-muted-foreground md:flex">
+            <Link to="/profile/offline" className="hidden h-9 sm:h-10 items-center gap-2 rounded-xl border border-line bg-card px-3 text-xs font-semibold text-muted-foreground md:flex">
               {online ? <span className="size-2 rounded-full bg-primary shadow-[0_0_0_4px] shadow-primary/20" /> : <WifiOff className="size-3.5 text-amber" />}
               {online ? t("offlineReady") : t("offlineNow").split(".")[0]}
             </Link>
             <LangSwitch />
             <ThemeToggle />
-            <Link to="/notifications" aria-label={t("navNotifications")} className="relative grid size-10 place-items-center rounded-xl border border-line bg-card text-muted-foreground hover:text-foreground">
-              <Bell className="size-[18px]" />
+            <Link to="/notifications" aria-label={t("navNotifications")} className="relative grid size-9 sm:size-10 place-items-center rounded-xl border border-line bg-card text-muted-foreground hover:text-foreground">
+              <Bell className="size-4 sm:size-[18px]" />
               {due > 0 && <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">{due}</span>}
             </Link>
           </div>
         </div>
-        {!online && <p className="border-t border-amber/30 bg-amber/10 px-4 py-2 text-center text-sm font-medium text-amber">{t("offlineNow")}</p>}
+        {!online && <p className="border-t border-amber/30 bg-amber/10 px-4 py-1.5 text-center text-xs sm:text-sm font-medium text-amber">{t("offlineNow")}</p>}
       </header>
 
       <div className="mx-auto max-w-[1440px] lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
@@ -203,10 +203,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main
           id="main"
           className={cn(
-            "min-w-0",
+            "min-w-0 flex-1",
             isAssistant
-              ? "p-0 h-[calc(100dvh-4rem-3.75rem-env(safe-area-inset-bottom))] lg:h-[calc(100dvh-4rem)] overflow-hidden"
-              : "px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 lg:px-10 lg:pb-16"
+              ? "p-0 h-[calc(100dvh-3.5rem-4.25rem-max(0px,env(safe-area-inset-top)))] sm:h-[calc(100dvh-4rem-4.5rem)] lg:h-[calc(100dvh-4rem)] overflow-hidden"
+              : "px-4 pb-[calc(6rem+max(0.75rem,env(safe-area-inset-bottom)))] pt-4 sm:pt-6 sm:px-6 lg:px-10 lg:pb-16"
           )}
         >
           <div className={cn("w-full", isAssistant ? "h-full max-w-none" : "mx-auto max-w-5xl")}>{children}</div>
@@ -308,20 +308,20 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-canvas/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg lg:hidden">
-        <div className="mx-auto grid max-w-xl grid-cols-5 items-end px-2 pb-1.5 pt-1">
+      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-canvas/95 pb-[max(0.6rem,env(safe-area-inset-bottom))] backdrop-blur-lg lg:hidden shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+        <div className="mx-auto grid max-w-xl grid-cols-5 items-end px-2 pb-1 pt-1">
           {nav.map((item) => {
             const Icon = item.icon;
             if ("primary" in item) {
               return (
-                <Link key={item.to} to={item.to} className="group flex flex-col items-center gap-1 text-[11px] font-semibold text-muted-foreground data-[status=active]:text-primary">
-                  <span className="-mt-5 grid size-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-[0_10px_28px_-10px] shadow-primary ring-4 ring-canvas transition-transform group-active:scale-95"><Icon className="size-6" /></span>
+                <Link key={item.to} to={item.to} className="group flex flex-col items-center gap-0.5 text-[10px] sm:text-[11px] font-semibold text-muted-foreground data-[status=active]:text-primary">
+                  <span className="-mt-4 grid size-13 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-[0_8px_20px_-6px] shadow-primary ring-4 ring-canvas transition-transform group-active:scale-95"><Icon className="size-6" /></span>
                   {item.label}
                 </Link>
               );
             }
             return (
-              <Link key={item.to} to={item.to} activeOptions={{ exact: item.exact }} className="group flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] font-semibold text-muted-foreground data-[status=active]:text-primary">
+              <Link key={item.to} to={item.to} activeOptions={{ exact: item.exact }} className="group flex min-h-12 flex-col items-center justify-center gap-0.5 text-[10px] sm:text-[11px] font-semibold text-muted-foreground data-[status=active]:text-primary">
                 <span className="grid h-7 w-12 place-items-center rounded-full transition-colors group-data-[status=active]:bg-primary/15"><Icon className="size-5" /></span>
                 <span className={cn("max-w-full truncate px-0.5")}>{item.label}</span>
               </Link>

@@ -244,6 +244,26 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Native Android APK Bridge Integration: Instant on-device Llama response without network dependency
+    try {
+      import("./services/native").then(({ getNativeBridge }) => {
+        const bridge = getNativeBridge();
+        if (bridge && typeof bridge.ask === "function") {
+          bridge.ask({
+            question,
+            lang: settings.lang,
+            context: ctx ? JSON.stringify(ctx) : ""
+          }).then((reply) => {
+            if (reply && reply.trim().length > 0) {
+              finish(reply);
+            } else {
+              finish(llamaRes.text);
+            }
+          }).catch(() => finish(llamaRes.text));
+        }
+      }).catch(() => {});
+    } catch {}
+
     // Structured Diagnosis Context creation for multimodal reasoning
     const diagContext: DiagnosisContext | null = ctx ? {
       crop: ctx.crop ?? "rice",

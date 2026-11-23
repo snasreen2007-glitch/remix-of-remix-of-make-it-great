@@ -74,7 +74,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     // Each content route sets its own head(). Never add og:image or twitter:image here.
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" },
       { name: "theme-color", content: "#0f1a14" },
       { title: "KisanAI — Smart On-Device Crop Disease & Health Intelligence" },
       { name: "description", content: "KisanAI provides instant on-device computer vision diagnosis and agronomic guidance for rice and chilli crops." },

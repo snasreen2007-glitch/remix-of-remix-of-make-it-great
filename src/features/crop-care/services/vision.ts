@@ -600,6 +600,9 @@ export async function analyzeImageWithVision(
       let chloroticStreakPixels = 0;
       let brownSpotPixels = 0;
       let blastAshCorePixels = 0;
+      let whiteCorePixels = 0;
+      let brownMarginPixels = 0;
+      let yellowHaloPixels = 0;
       let whitePowderyPixels = 0;
       let orangeTungroPixels = 0;
       let skinPixels = 0;
@@ -701,8 +704,8 @@ export async function analyzeImageWithVision(
           const yCb = 128 - 0.168736 * r8 - 0.331264 * g8 + 0.5 * b8;
           const yCr = 128 + 0.5 * r8 - 0.418688 * g8 - 0.081312 * b8;
           const isSkin =
-            (yCr >= 132 && yCr <= 180 && yCb >= 70 && yCb <= 135) &&
-            (r8 >= g8 * 0.82) && (r8 > b8 * 1.02) && (r8 >= 22);
+            (yCr >= 130 && yCr <= 185 && yCb >= 70 && yCb <= 140) &&
+            (r8 >= 20);
 
           if (isSkin) skinPixels++;
 
@@ -721,11 +724,14 @@ export async function analyzeImageWithVision(
           const diffRg8 = Math.abs(r8 - g8);
           const diffGb8 = Math.abs(g8 - b8);
           const isAshCore = !isSkin && (diffRg8 < 40) && (diffGb8 < 55) && (r8 > 100) && (g8 > 100) && (b8 > 80);
+          const isWhiteCore = !isSkin && (r8 > 150) && (g8 > 145) && (b8 > 120) && (Math.abs(r8 - g8) < 22) && (b8 > r8 * 0.70);
+          const isBrownMargin = !isSkin && (r8 > 60) && (r8 < 180) && (g8 < r8 * 0.82) && (b8 < 100);
+          const isYellowHalo = !isSkin && (r8 > 130) && (g8 > 100) && (b8 < 85) && (r8 > b8 * 1.45);
           const isBrownLesion = !isSkin && (r8 > 45) && (g8 < r8 * 0.95) && (b8 < r8 * 0.85) && (r8 > b8 * 1.15);
           const isChloroticStreak = !isSkin && (h >= 36 && h <= 54 && s >= 0.25 && v >= 0.40);
           const isPowdery = !isSkin && (v >= 0.72 && s <= 0.22);
           const isOrangeDiscoloration = !isSkin && (r8 > 140 && g8 > 60 && g8 < r8 * 0.80 && b8 < 75);
-          const isLesion = !isSkin && (isChloroticStreak || isBrownLesion || isAshCore || isPowdery || isOrangeDiscoloration);
+          const isLesion = !isSkin && (isChloroticStreak || isBrownLesion || isAshCore || isWhiteCore || isBrownMargin || isYellowHalo || isPowdery || isOrangeDiscoloration);
 
           if (isFoliage) {
             plantPixels++;
@@ -741,6 +747,9 @@ export async function analyzeImageWithVision(
             if (isChloroticStreak) chloroticStreakPixels++;
             if (isBrownLesion) brownSpotPixels++;
             if (isAshCore) blastAshCorePixels++;
+            if (isWhiteCore) whiteCorePixels++;
+            if (isBrownMargin) brownMarginPixels++;
+            if (isYellowHalo) yellowHaloPixels++;
             if (isPowdery) whitePowderyPixels++;
             if (isOrangeDiscoloration) orangeTungroPixels++;
           }
@@ -787,7 +796,7 @@ export async function analyzeImageWithVision(
       }
 
       // Guard 2: Human Face & Skin Detection Rejection (reject when human skin is present without dominant genuine crop foliage)
-      const isHumanSubject = (skinRatio >= 0.035 && foliarRatio < 0.18) || (skinRatio >= 0.020 && foliarRatio < 0.10);
+      const isHumanSubject = (skinRatio >= 0.04 && foliarRatio < 0.20) || (skinRatio >= 0.02 && foliarRatio < 0.08);
       if (isHumanSubject) {
         return resolve({
           source: "model",
@@ -804,7 +813,7 @@ export async function analyzeImageWithVision(
       }
 
       // Guard 3: Reject scenes with virtually no botanical leaf foliage (blank walls, non-plant objects, room, furniture)
-      const isMissingFoliage = (foliarRatio < 0.08 || (foliarRatio < 0.15 && meanExg < 15.0));
+      const isMissingFoliage = (foliarRatio < 0.10 && meanExg < 8.0) || (foliarRatio < 0.05) || (meanExg < 2.0 && foliarRatio < 0.15);
       if (isMissingFoliage) {
         return resolve({
           source: "model",
@@ -1023,13 +1032,14 @@ export async function analyzeImageWithVision(
       if (crop === "rice") {
         if (mode === "disease") {
           const ashRatio = blastAshCorePixels / Math.max(1, brownSpotPixels);
-          const totalLesions = blastAshCorePixels + brownSpotPixels + chloroticStreakPixels;
+          const blastCoreRatio = whiteCorePixels / Math.max(1, brownMarginPixels);
+          const totalLesions = blastAshCorePixels + brownSpotPixels + chloroticStreakPixels + whiteCorePixels + brownMarginPixels;
 
           if (plantPixels < 350 || foliarRatio < 0.08) {
             return resolve({
               source: "model",
               outcome: "unknown",
-              confidence: 0.15,
+              confidence: 0.10,
               diagnostics: {
                 plantPixels,
                 lesionPixels: totalLesions,
@@ -1040,6 +1050,14 @@ export async function analyzeImageWithVision(
             });
           }
 
+          const isRiceBlastSpindle =
+            ((blastCoreRatio >= 0.18 && whiteCorePixels >= 500) || (whiteCorePixels >= 1200)) &&
+            (yellowHaloPixels < whiteCorePixels * 3.5 || whiteCorePixels >= 1500);
+
+          const isRiceBrownSpotLesions =
+            ((brownMarginPixels >= 1500 && blastCoreRatio < 0.15) || (brownMarginPixels >= 3500 && blastCoreRatio < 0.18)) ||
+            (yellowHaloPixels >= 2500 && blastCoreRatio < 0.12 && brownMarginPixels >= 800);
+
           // Priority 1: Query Local Deep Learning Server if available
           if (deepModelResult && deepModelResult.slug && deepModelResult.slug !== "unknown" && deepModelResult.confidence >= 0.35) {
             detectedSlug = deepModelResult.slug;
@@ -1048,9 +1066,9 @@ export async function analyzeImageWithVision(
             candidates = deepModelResult.candidates || [{ slug: detectedSlug, confidence }];
           }
           // Case 1: Rice Blast (Spindle lesions with greyish-white ash core and necrotic margins)
-          else if ((blastAshCorePixels > 400 && ashRatio >= 0.40) || (ashRatio >= 0.50 && blastAshCorePixels > 150) || (blastAshCorePixels > 1000)) {
+          else if (isRiceBlastSpindle || (blastAshCorePixels > 400 && ashRatio >= 0.35) || (ashRatio >= 0.45 && blastAshCorePixels > 150) || (blastAshCorePixels > 1000)) {
             detectedSlug = "rice-blast";
-            confidence = Math.min(0.97, Math.max(0.88, 0.82 + Math.min(0.14, blastAshCorePixels / 5000)));
+            confidence = Math.min(0.97, Math.max(0.90, 0.86 + Math.min(0.10, Math.max(whiteCorePixels, blastAshCorePixels) / 10000)));
             patternName = "rice_blast";
             candidates = [
               { slug: "rice-blast", confidence },
@@ -1058,7 +1076,18 @@ export async function analyzeImageWithVision(
               { slug: "bacterial-leaf-blight", confidence: Math.round((1 - confidence) * 0.3 * 100) / 100 },
             ];
           }
-          // Case 2: Rice Tungro Virus (Widespread orange-yellow chlorotic foliar discoloration)
+          // Case 2: Rice Brown Spot (Circular necrotic spots with yellow halos, low ash ratio)
+          else if (isRiceBrownSpotLesions || (brownSpotPixels > 300 && ashRatio < 0.20) || (brownSpotPixels > 1000 && ashRatio < 0.25) || (brownMarginPixels > 1200 && blastCoreRatio < 0.15)) {
+            detectedSlug = "brown-spot";
+            confidence = Math.min(0.97, Math.max(0.90, 0.86 + Math.min(0.10, Math.max(brownMarginPixels, brownSpotPixels) / 25000)));
+            patternName = "brown_spot";
+            candidates = [
+              { slug: "brown-spot", confidence },
+              { slug: "rice-blast", confidence: Math.round((1 - confidence) * 0.7 * 100) / 100 },
+              { slug: "bacterial-leaf-streak", confidence: Math.round((1 - confidence) * 0.3 * 100) / 100 },
+            ];
+          }
+          // Case 3: Rice Tungro Virus (Widespread orange-yellow chlorotic foliar discoloration)
           else if (orangeTungroPixels > 2000 && orangeTungroPixels > brownSpotPixels * 2.5) {
             detectedSlug = "tungro";
             confidence = 0.90;
@@ -1067,17 +1096,6 @@ export async function analyzeImageWithVision(
               { slug: "tungro", confidence: 0.90 },
               { slug: "bacterial-leaf-blight", confidence: 0.06 },
               { slug: "brown-spot", confidence: 0.04 },
-            ];
-          }
-          // Case 3: Brown Spot (Circular necrotic spots with yellow halos, low ash ratio)
-          else if ((brownSpotPixels > 300 && ashRatio < 0.35) || (brownSpotPixels > 1000 && ashRatio < 0.40)) {
-            detectedSlug = "brown-spot";
-            confidence = Math.min(0.96, Math.max(0.88, 0.82 + Math.min(0.14, brownSpotPixels / 5000)));
-            patternName = "brown_spot";
-            candidates = [
-              { slug: "brown-spot", confidence },
-              { slug: "rice-blast", confidence: Math.round((1 - confidence) * 0.7 * 100) / 100 },
-              { slug: "bacterial-leaf-streak", confidence: Math.round((1 - confidence) * 0.3 * 100) / 100 },
             ];
           }
           // Case 4: Bacterial Leaf Blight (Wavy marginal yellow/straw stripes)

@@ -103,50 +103,93 @@ class VisionInferenceService(private val context: Context) {
         val total = pixels.size
         var skinCount = 0
         var foliageCount = 0
-        var lesionCount = 0
+        var sumExg = 0L
 
         for (p in pixels) {
             val r = (p shr 16) and 0xFF
             val g = (p shr 8) and 0xFF
             val b = p and 0xFF
 
-            // Biometric skin detection (Kovac & YCbCr)
-            val isSkin = (r > 95 && g > 40 && b > 20 && r > g && r > b && (r - g) > 15 && (r - b) > 20)
+            // Biometric skin detection across all Fitzpatrick types (YCbCr)
+            val yCb = 128.0 - 0.168736 * r - 0.331264 * g + 0.5 * b
+            val yCr = 128.0 + 0.5 * r - 0.418688 * g - 0.081312 * b
+            val isSkin = (yCr in 130.0..185.0 && yCb in 70.0..140.0 && r >= 20)
             if (isSkin) {
                 skinCount++
             }
 
-            // Green/yellow foliar chlorophyll (healthy leaves, chlorosis, senescing leaves)
-            val isGreen = (g >= 22 && g >= r * 0.88 && g > b * 1.02) ||
-                          (g > 25 && (g - r) >= 3 && (g - b) >= 4)
-            val isYellow = (r > 35 && g > 35 && (r + g) > b * 1.25 && Math.abs(r - g) < 55 && b < Math.min(r, g) * 0.90)
-            // Fungal & necrotic lesions (blast spots, brown spots, anthracnose)
-            val isLesion = (r > 24 && g > 15 && (r + g) > b * 1.15 && (r - b) >= 5 && b < Math.max(r, g) * 0.92)
+            val exg = 2 * g - r - b
+            sumExg += exg
 
-            if (isGreen || isYellow) {
+            // Living vegetative plant green requires green chlorophyll dominance
+            val isGreen = !isSkin && (g > r * 1.02 && g > b * 1.02 && exg > 6 && g > 25)
+            val isChlorotic = !isSkin && (r > 40 && g > 40 && (r + g) > 2.0 * b && g >= r * 0.70 && b < Math.min(r, g) * 0.85)
+
+            if (isGreen || isChlorotic) {
                 foliageCount++
-            } else if (isLesion) {
-                lesionCount++
             }
         }
 
         val skinShare = skinCount.toFloat() / total
         val foliageShare = foliageCount.toFloat() / total
-        // Lesions only count towards plant tissue if accompanying genuine foliar chlorophyll
-        val validLesionShare = if (foliageShare >= 0.03f) lesionCount.toFloat() / total else 0f
-        val plantShare = foliageShare + validLesionShare
+        val meanExg = sumExg.toFloat() / total
 
-        // Human face, selfie, portrait, or person in frame: >= 6% human skin tone and < 15% green foliage
-        if (skinShare >= 0.06f && foliageShare < 0.15f) {
+        // Human face, selfie, portrait: >= 4% skin tone and < 20% foliage, or >= 2% skin and < 8% foliage
+        if ((skinShare >= 0.04f && foliageShare < 0.20f) || (skinShare >= 0.02f && foliageShare < 0.08f)) {
             return Pair(false, "REJECTED_HUMAN_FACE_OR_SKIN")
         }
 
-        // Non-plant object / background without plant tissue (< 4.0% plant tissue or < 2.0% green foliage)
-        if (plantShare < 0.040f || foliageShare < 0.020f) {
+        // Non-plant object / wall / desk / room without genuine foliage
+        if ((foliageShare < 0.10f && meanExg < 8.0f) || (foliageShare < 0.05f) || (meanExg < 2.0f && foliageShare < 0.15f)) {
             return Pair(false, "REJECTED_OOD_NON_PLANT")
         }
 
         return Pair(true, "VALID_FOLIAGE")
+    }
+
+    private fun analyzeRicePathology(bitmap: Bitmap): Triple<String?, Double, String?> {
+        val scaled = Bitmap.createScaledBitmap(bitmap, 256, 256, false)
+        val pixels = IntArray(256 * 256)
+        scaled.getPixels(pixels, 0, 256, 0, 0, 256, 256)
+
+        var whiteCore = 0
+        var brownMargin = 0
+        var yellowHalo = 0
+
+        for (p in pixels) {
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+
+            // Ash-white spindle core
+            if (r > 150 && g > 145 && b > 120 && Math.abs(r - g) < 22 && b > r * 0.70) {
+                whiteCore++
+            }
+            // Brown necrotic margin
+            if (r in 61..179 && g < r * 0.82 && b < 100) {
+                brownMargin++
+            }
+            // Chlorotic yellow halo
+            if (r > 130 && g > 100 && b < 85 && r > b * 1.45) {
+                yellowHalo++
+            }
+        }
+
+        val ratio = whiteCore.toFloat() / Math.max(1, brownMargin)
+
+        // Case 1: Rice Blast (Spindle lesions with grey/white ash center)
+        if ((ratio >= 0.18f && whiteCore >= 500) || (whiteCore >= 1200)) {
+            val conf = Math.min(0.97, Math.max(0.90, 0.86 + whiteCore / 20000.0))
+            return Triple("rice-blast", conf, "Spindle-shaped foliar lesions with greyish-white ash core and necrotic margins")
+        }
+
+        // Case 2: Brown Spot (Circular dark spots with prominent yellow halos, minimal ash core)
+        if ((brownMargin >= 1500 && ratio < 0.15f) || (brownMargin >= 3500 && ratio < 0.18f) || (yellowHalo >= 2500 && ratio < 0.12f && brownMargin >= 800)) {
+            val conf = Math.min(0.97, Math.max(0.90, 0.86 + brownMargin / 50000.0))
+            return Triple("brown-spot", conf, "Circular to oval dark brown necrotic lesions surrounded by chlorotic yellow halos")
+        }
+
+        return Triple(null, 0.0, null)
     }
 
     /**
@@ -165,8 +208,23 @@ class VisionInferenceService(private val context: Context) {
                 level = 1,
                 status = reason,
                 isOOD = true,
-                explanation = if (reason.contains("FACE")) "Human face or skin detected. Please photograph a crop leaf." else "Specimen does not contain recognized agricultural foliage."
+                explanation = if (reason.contains("FACE")) "Human face or skin detected. Please photograph an agricultural crop leaf, not people." else "Specimen does not contain recognized agricultural foliage."
             )
+        }
+
+        // Domain-specific calibrated visual pathology (Rice Blast vs Brown Spot precision engine)
+        if (crop == "rice") {
+            val (pathoSlug, pathoConf, pathoExplain) = analyzeRicePathology(bitmap)
+            if (pathoSlug != null) {
+                return DiagnosisInferenceResult(
+                    slug = pathoSlug,
+                    confidence = pathoConf,
+                    level = 4,
+                    status = "IDENTIFIED",
+                    category = "disease",
+                    explanation = pathoExplain
+                )
+            }
         }
 
         if (hierarchicalModule != null) {

@@ -730,7 +730,14 @@ export function AssistantPage() {
           ========================================================================= */}
       <div className="flex flex-1 flex-col h-full min-w-0 overflow-hidden relative">
         {/* Top Control Bar */}
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-line bg-card/90 px-3 sm:px-6 backdrop-blur-md z-10">
+        <header
+          className={cn(
+            "flex shrink-0 items-center justify-between border-b border-line bg-card/90 px-3 sm:px-6 backdrop-blur-md z-10",
+            isFullscreen
+              ? "pt-[max(0px,env(safe-area-inset-top))] h-[calc(3.5rem+max(0px,env(safe-area-inset-top)))]"
+              : "h-12 sm:h-14"
+          )}
+        >
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Sidebar toggle button (desktop) */}
             <button
@@ -1193,7 +1200,12 @@ export function AssistantPage() {
         {/* =========================================================================
             BOTTOM INPUT DOCK (Sticky & Responsive)
             ========================================================================= */}
-        <div className="shrink-0 border-t border-line bg-card/95 p-3 sm:p-4 backdrop-blur-md">
+        <div
+          className={cn(
+            "shrink-0 border-t border-line bg-card/95 p-2.5 sm:p-4 backdrop-blur-md",
+            isFullscreen && "pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          )}
+        >
           <div className="max-w-3xl mx-auto w-full space-y-2">
             <form
               onSubmit={handleSubmit}
