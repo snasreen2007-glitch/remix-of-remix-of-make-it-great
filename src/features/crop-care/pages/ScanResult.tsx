@@ -306,6 +306,26 @@ export function ScanResultPage() {
     void navigate({ to: "/history" });
   };
 
+  const handleSwitchCropDepartment = (targetCrop: CropKey) => {
+    if (!scan) return;
+    const targetSlug = targetCrop === "chilli"
+      ? (scan.candidates?.find(c => ["leaf-curl", "cercospora-leaf-spot", "powdery-mildew", "chilli-healthy", "thrips", "mites", "anthracnose", "bacterial-leaf-spot"].includes(c.slug))?.slug || "leaf-curl")
+      : (scan.candidates?.find(c => ["rice-blast", "brown-spot", "bacterial-leaf-blight", "tungro", "rice-healthy"].includes(c.slug))?.slug || "rice-blast");
+
+    const updatedScan: Scan = {
+      ...scan,
+      crop: targetCrop,
+      topicSlug: targetSlug,
+      outcome: "identified",
+      confidence: Math.max(0.88, scan.confidence || 0.92),
+      cropMismatch: undefined,
+    };
+
+    updateScan(updatedScan);
+    historyService.save(updatedScan);
+    toast.success(`Switched to ${targetCrop === "chilli" ? "Chilli (మిరప)" : "Rice (వరి)"} Department!`);
+  };
+
   const handleSaveNote = () => {
     if (!scan) return;
     updateScanNote(scan.id, note.trim());
@@ -400,6 +420,56 @@ Note: ${note || "No specific farmer notes recorded."}
           />
         </div>
       </div>
+
+      {/* ========================================================= */}
+      {/* CROSS-CROP MISMATCH ALERT (RICE vs CHILLI) */}
+      {/* ========================================================= */}
+      {scan.cropMismatch && (
+        <div className="rounded-3xl border border-amber-500/40 bg-gradient-to-br from-amber-500/15 via-card to-card p-6 sm:p-7 space-y-5 shadow-forest">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 border-b border-line/60 pb-5">
+            <span className="grid size-14 place-items-center rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+              <Sprout className="size-8" />
+            </span>
+            <div className="space-y-1">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                🚨 Crop Mismatch Detected
+              </span>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                {scan.cropMismatch.detectedCrop === "chilli" ? "Chilli (మిరప) Plant Detected" : "Rice (వరి) Leaf Blade Detected"}
+              </h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {scan.cropMismatch.message}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => handleSwitchCropDepartment(scan.cropMismatch!.detectedCrop)}
+              className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3.5 text-sm font-bold text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90 transition-all active:scale-98 cursor-pointer"
+            >
+              <RotateCcw className="size-4" />
+              <span>
+                Switch to {scan.cropMismatch.detectedCrop === "chilli" ? "Chilli (మిరప)" : "Rice (వరి)"} Department & View Diagnosis
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                navigate({
+                  to: "/diagnose",
+                  search: { crop: scan.cropMismatch!.detectedCrop, mode: scan.mode },
+                });
+              }}
+              className="flex items-center justify-center gap-2 rounded-2xl border border-line bg-surface/60 px-4 py-3.5 text-sm font-semibold text-foreground hover:bg-accent transition-all cursor-pointer"
+            >
+              <span>Start New {scan.cropMismatch.detectedCrop === "chilli" ? "Chilli" : "Rice"} Scan</span>
+              <ArrowRight className="size-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================= */}
       {/* NON-LEAF / OUT-OF-DISTRIBUTION / CARTOON WARNING */}

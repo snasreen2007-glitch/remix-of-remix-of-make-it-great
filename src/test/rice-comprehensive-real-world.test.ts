@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assessPixels } from "../features/crop-care/services/quality";
+import { computeVenationAnisotropy } from "../features/crop-care/services/vision";
 
 describe("Rice Pathology & Real-World Foliar Evaluation Suite", () => {
   const W = 64;
@@ -221,6 +222,44 @@ describe("Rice Pathology & Real-World Foliar Evaluation Suite", () => {
     const bsAshRatio = bsAsh / Math.max(1, bsBrown);
     expect(bsAshRatio).toBeLessThan(0.35);
     expect(bsBrown).toBeGreaterThan(500);
+  });
+
+  it("measures high directional venation anisotropy on parallel monocot rice blade", () => {
+    const pixels = new Uint8ClampedArray(total * 4);
+    // Monocot blade with vertical parallel veins (high vertical gradient variation)
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        const vein = (x % 4 === 0) ? 25 : 0;
+        pixels[i] = 40 + vein;
+        pixels[i + 1] = 145 + vein;
+        pixels[i + 2] = 35;
+        pixels[i + 3] = 255;
+      }
+    }
+
+    const { venationAnisotropy, gradRatio } = computeVenationAnisotropy(pixels, W, H);
+    expect(venationAnisotropy).toBeGreaterThanOrEqual(1.65);
+    expect(gradRatio).toBeGreaterThanOrEqual(1.65);
+  });
+
+  it("measures low isotropic gradient distribution on reticulate net-veined dicot chilli leaf", () => {
+    const pixels = new Uint8ClampedArray(total * 4);
+    // Dicot leaf with branching net veins in all directions (isotropic gradient)
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        const netVein = ((x + y) % 6 === 0 || (x - y + 100) % 6 === 0) ? 20 : 0;
+        pixels[i] = 45 + netVein;
+        pixels[i + 1] = 135 + netVein;
+        pixels[i + 2] = 38;
+        pixels[i + 3] = 255;
+      }
+    }
+
+    const { venationAnisotropy, gradRatio } = computeVenationAnisotropy(pixels, W, H);
+    expect(venationAnisotropy).toBeLessThanOrEqual(1.45);
+    expect(gradRatio).toBeLessThanOrEqual(1.35);
   });
 });
 

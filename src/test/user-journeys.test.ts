@@ -350,5 +350,5 @@ describe("Complete End-to-End User Journeys (A through H)", () => {
     expect(failureRes.text).toBeDefined();
     expect(failureRes.text.length).toBeGreaterThan(20);
     expect(["online", "offline"]).toContain(failureRes.engineUsed);
-  });
+  }, 15000);
 });

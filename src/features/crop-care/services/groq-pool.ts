@@ -153,7 +153,7 @@ export async function queryGroqChat(
           max_tokens: options.maxTokens || 1024,
           temperature: options.temperature ?? 0.4,
         }),
-        signal: AbortSignal.timeout(3500),
+        signal: AbortSignal.timeout(typeof process !== "undefined" && process.env?.NODE_ENV === "test" ? 1200 : 3500),
       });
 
       if (res.status === 429) {

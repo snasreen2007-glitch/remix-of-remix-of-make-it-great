@@ -435,6 +435,7 @@ export function DiagnosePage() {
             ...(outcome === "identified" && result.severity ? { severity: result.severity } : {}),
             ...(result.pestAnalysis ? { pestAnalysis: result.pestAnalysis } : {}),
             ...(result.nutritionAnalysis ? { nutritionAnalysis: result.nutritionAnalysis } : {}),
+            ...(result.cropMismatch ? { cropMismatch: result.cropMismatch } : {}),
             ...(qualityReport ? { quality: qualityReport } : {}),
             diagnostics: result.diagnostics,
           };

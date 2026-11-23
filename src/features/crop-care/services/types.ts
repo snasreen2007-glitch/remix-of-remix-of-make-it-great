@@ -43,6 +43,13 @@ export type NutritionAnalysis = {
   isConfirmed?: boolean;
 };
 
+export type CropMismatch = {
+  detectedCrop: CropKey;
+  expectedCrop: CropKey;
+  confidence: number;
+  message: string;
+};
+
 export type Scan = {
   id: string;
   crop: CropKey;
@@ -65,9 +72,18 @@ export type Scan = {
   severity?: SeverityResult;
   pestAnalysis?: PestAnalysis;
   nutritionAnalysis?: NutritionAnalysis;
+  cropMismatch?: CropMismatch;
   quality?: QualityReport;
   curePlan?: DynamicCurePlan;
   note?: string;
+  diagnostics?: {
+    plantPixels?: number;
+    lesionPixels?: number;
+    affectedPercent?: number;
+    isCropValid?: boolean;
+    pattern?: string;
+    [key: string]: any;
+  };
 };
 
 export type SavedKind = "topic" | "treatment" | "prevention" | "report";

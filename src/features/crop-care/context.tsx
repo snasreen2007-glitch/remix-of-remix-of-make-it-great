@@ -228,40 +228,23 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Failsafe timer: guarantees the UI never gets stuck with animated dots
+    // Failsafe timer: guarantees the UI never gets stuck with animated dots under any network or platform condition
     failsafeTimer = setTimeout(() => {
       finish(llamaRes.text);
-    }, 4500);
+    }, 2500);
 
-    // 1. Android Native APK or Local Mode: Execute instant on-device Llama engine
-    if (isNativeApp() || settings.llmProvider === "local" || settings.llmProvider === "ollama") {
-      const bridge = getNativeBridge();
-      if (bridge?.ask) {
-        bridge.ask({ question, context: llamaRes.text, lang: settings.lang })
-          .then((ans) => {
-            if (ans && ans.length > 5) {
-              finish(ans);
-            } else {
-              finish(llamaRes.text);
-            }
-          })
-          .catch(() => {
-            finish(llamaRes.text);
-          });
-        return;
-      }
-      finish(llamaRes.text);
+    const isDeviceOnline = typeof navigator !== "undefined" ? Boolean(navigator.onLine) : false;
+
+    // 1. Fully Offline execution (Offline in Browser, Offline in APK, or explicitly configured Local engine)
+    if (!isDeviceOnline || settings.llmProvider === "local" || settings.llmProvider === "ollama") {
+      // Natural brief typing cadence (180ms) for responsive feel without blocking or hanging
+      setTimeout(() => {
+        finish(llamaRes.text);
+      }, 180);
       return;
     }
 
-    // 2. Browser offline mode: immediate verified response
-    const isDeviceOnline = typeof navigator !== "undefined" ? navigator.onLine : false;
-    if (!isDeviceOnline) {
-      finish(llamaRes.text);
-      return;
-    }
-
-    // Structured Diagnosis Context creation
+    // Structured Diagnosis Context creation for multimodal reasoning
     const diagContext: DiagnosisContext | null = ctx ? {
       crop: ctx.crop ?? "rice",
       predictedDiseaseOrPest: ctx.name || ctx.slug || "Crop condition",
@@ -280,33 +263,41 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
       isUncertainOrOOD: (ctx.confidence ?? 0.90) < 0.40,
     } : null;
 
-    // 3. Online Web Browser execution via ai-router with guaranteed fast fallback
-    import("./services/ai-router").then(async ({ aiRouter }) => {
-      if (settings.llmProvider === "openai" || settings.llmProvider === "gemini") {
-        aiRouter.setMode("online");
-        if (settings.customModel) aiRouter.setOnlineModel(settings.customModel);
-      } else {
-        aiRouter.setMode("auto");
-      }
+    // 2. Online execution via ai-router with guaranteed fast fallback to grounded Llama engine
+    try {
+      import("./services/ai-router").then(async ({ aiRouter }) => {
+        if (settings.llmProvider === "openai" || settings.llmProvider === "gemini") {
+          aiRouter.setMode("online");
+          if (settings.customModel) aiRouter.setOnlineModel(settings.customModel);
+        } else {
+          aiRouter.setMode("auto");
+        }
 
-      const formattedHistory = messages.slice(-6).map((m) => ({
-        role: m.role === "farmer" ? ("user" as const) : ("assistant" as const),
-        content: m.text,
-      }));
-      formattedHistory.push({ role: "user" as const, content: question });
+        const formattedHistory = messages.slice(-6).map((m) => ({
+          role: m.role === "farmer" ? ("user" as const) : ("assistant" as const),
+          content: m.text,
+        }));
+        formattedHistory.push({ role: "user" as const, content: question });
 
-      aiRouter.executeChat({
-        messages: formattedHistory,
-        diagnosisContext: diagContext || undefined,
-        lang: settings.lang,
-      }).then((result) => {
-        finish(result.text);
+        aiRouter.executeChat({
+          messages: formattedHistory,
+          diagnosisContext: diagContext || undefined,
+          lang: settings.lang,
+        }).then((result) => {
+          if (result && result.text && result.text.length > 5) {
+            finish(result.text);
+          } else {
+            finish(llamaRes.text);
+          }
+        }).catch(() => {
+          finish(llamaRes.text);
+        });
       }).catch(() => {
         finish(llamaRes.text);
       });
-    }).catch(() => {
+    } catch {
       finish(llamaRes.text);
-    });
+    }
   }, [settings, online, messages]);
 
   const clearChat = useCallback(() => { setMessages([]); chatStore.save([]); }, []);
