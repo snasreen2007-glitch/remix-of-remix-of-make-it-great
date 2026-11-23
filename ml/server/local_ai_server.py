@@ -140,64 +140,22 @@ chilli_model.eval()
 
 def is_valid_plant_leaf(img: Image.Image) -> tuple[bool, str]:
     """Check if the image is a genuine plant leaf and not a face, cartoon, drawing, or non-plant object."""
-    rgb = img.convert("RGB").resize((128, 128))
-    pixels = list(rgb.getdata())
-    total = len(pixels)
-
-    # 1. Color palette entropy: reject extreme flat vector drawings with very few colors
-    colors = rgb.getcolors(maxcolors=1024)
-    if colors:
-        num_colors = len(colors)
-        max_freq = max(c[0] for c in colors)
-        top_share = max_freq / total
-        # Reject pure solid graphics or extreme flat vector art with virtually zero color depth
-        if (num_colors < 15 and top_share > 0.85) or (num_colors < 8 and top_share > 0.70):
-            return False, "rejected_flat_drawing_or_cartoon"
-
-    # 2. Check for real botanical foliage pixels vs human skin and random objects
-    foliage_green_chlorotic = 0
-    foliage_lesions = 0
-    neon_cartoon_count = 0
-    skin_count = 0
-
-    for r, g, b in pixels:
-        # Extreme neon / artificial colors common in cartoons
-        if (r > 230 and g > 230 and b < 25) or (g > 235 and r < 30 and b > 235) or (r < 25 and g > 245 and b < 25):
-            neon_cartoon_count += 1
-
-        # Check botanical features FIRST:
-        # Genuine green leaf or chlorotic foliage
-        is_green = (g > r * 0.92 and g > b * 1.04 and g > 25) or (g > 35 and g > r * 0.88 and g > b * 1.05)
-        is_yellow = (r > 55 and g > 50 and g >= r * 0.75 and b < max(r, g) * 0.88 and (r + g) > 1.9 * b)
-        # Brown necrotic lesions, blast ash centres, dry straw leaf blade
-        is_brown_lesion = (r > 35 and g > 20 and r >= g * 0.95 and b < max(r, g) * 0.88 and (r - g) < 70 and (r + g) > 1.7 * b)
-        is_straw = (r > 55 and g > 45 and g >= r * 0.70 and b < max(r, g) * 0.88 and abs(r - g) < 55)
-
-        if is_green or is_yellow:
-            foliage_green_chlorotic += 1
-        elif is_brown_lesion or is_straw:
-            foliage_lesions += 1
-        else:
-            # Human skin detection ONLY on non-botanical pixels
-            if (r > 95 and g > 40 and b > 20 and
-                r > g and r > b and
-                (r - g) > 20 and (r - b) > 30 and
-                (max(r, g, b) - min(r, g, b)) > 20):
-                skin_count += 1
-
-    total_botanical = foliage_green_chlorotic + foliage_lesions
-
-    if neon_cartoon_count / total > 0.20 and total_botanical / total < 0.05:
-        return False, "rejected_neon_cartoon"
-
-    # Reject human faces ONLY when human skin dominates (>45%) and virtually no plant tissue is present
-    if skin_count / total > 0.45 and total_botanical / total < 0.05:
-        return False, "rejected_human_face_or_skin"
-
-    # Require basic botanical presence (at least 2.0% plant foliage/lesion pixels)
-    if total_botanical / total < 0.02:
+    from ml.severity.hierarchical_vision import analyze_botanical_quality
+    q = analyze_botanical_quality(img)
+    if not q["valid"]:
+        if q.get("is_human_face"):
+            return False, "rejected_human_face_or_skin"
+        if q.get("is_indoor_wall_decor"):
+            return False, "rejected_indoor_wall_decor"
+        if q.get("is_non_plant"):
+            return False, "out_of_distribution_non_leaf"
+        if q.get("is_blurry"):
+            return False, "unfocused_or_blurry_photograph"
+        if q.get("is_too_dark"):
+            return False, "insufficient_lighting_dark"
+        if q.get("is_overexposed"):
+            return False, "overexposed_photograph"
         return False, "rejected_non_leaf_or_object"
-
     return True, "valid_leaf"
 
 

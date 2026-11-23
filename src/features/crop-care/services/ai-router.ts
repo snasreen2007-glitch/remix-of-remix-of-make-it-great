@@ -222,30 +222,40 @@ export class AIEngineRouter {
 
   private async executeOfflineInference(options: SendMessageOptions): Promise<{ text: string; model: string }> {
     try {
-      // 1. Try local AI server endpoint on Android localhost
-      const res = await fetch("http://127.0.0.1:8000/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: this.selectedOfflineModelId,
-          messages: options.messages,
-          lang: options.lang,
-        }),
-        signal: options.signal || AbortSignal.timeout(6000),
-      });
+      // 1. Try local AI server endpoint if running on desktop localhost
+      const isLocalHost = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+      if (isLocalHost) {
+        let signal = options.signal;
+        if (!signal && typeof AbortController !== "undefined") {
+          const controller = new AbortController();
+          setTimeout(() => controller.abort(), 1200);
+          signal = controller.signal;
+        }
 
-      if (res.ok) {
-        const json = await res.json();
-        const content = json.choices?.[0]?.message?.content;
-        if (content) {
-          return { text: content, model: this.selectedOfflineModelId };
+        const res = await fetch("http://127.0.0.1:8000/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: this.selectedOfflineModelId,
+            messages: options.messages,
+            lang: options.lang,
+          }),
+          signal,
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          const content = json.choices?.[0]?.message?.content;
+          if (content) {
+            return { text: content, model: this.selectedOfflineModelId };
+          }
         }
       }
     } catch {
-      // Offline server unmounted or browser sandbox
+      // Offline desktop server unmounted or mobile environment
     }
 
-    // 2. Embedded on-device neural response fallback
+    // 2. Embedded on-device neural response fallback (100% offline in browser & Android APK)
     const { generateLlamaChatResponse } = await import("./llama");
     const lastUserText = options.messages[options.messages.length - 1]?.content || "";
     const embeddedRes = generateLlamaChatResponse(lastUserText, options.lang, options.diagnosisContext);

@@ -103,7 +103,7 @@ def train():
         files = glob.glob(os.path.join(folder, "*.jpg")) + glob.glob(os.path.join(folder, "*.JPG"))
         np.random.seed(42)
         np.random.shuffle(files)
-        selected = files[:300] # 300 real images per class
+        selected = files # full real field dataset across all classes
         print(f"  Class {cls_idx} ({slug:22}): {len(selected)} photos from '{dir_name}'")
         for f in selected:
             try:
@@ -122,9 +122,9 @@ def train():
     )
 
     clf = HistGradientBoostingClassifier(
-        max_iter=60,
-        min_samples_leaf=10,
-        l2_regularization=0.3,
+        max_iter=130,
+        min_samples_leaf=6,
+        l2_regularization=0.2,
         learning_rate=0.09,
         random_state=42
     )

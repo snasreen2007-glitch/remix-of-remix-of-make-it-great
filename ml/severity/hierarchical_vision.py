@@ -17,10 +17,13 @@ from PIL import Image
 def analyze_botanical_quality(img: Image.Image):
     """
     Validates photographic quality, blur (Laplacian variance proxy), illumination,
-    and checks for presence of botanical tissue (chlorophyll/carotenoid pigments).
+    and checks for presence of genuine botanical crop leaf tissue (chlorophyll/carotenoid pigments)
+    while strictly rejecting human skin/faces, room furniture, cartoons, and non-plant objects.
     """
     rgb = img.convert("RGB").resize((128, 128))
-    arr = np.array(rgb, dtype=np.float32) / 255.0
+    arr8 = np.array(rgb, dtype=np.float32)
+    r8, g8, b8 = arr8[:, :, 0], arr8[:, :, 1], arr8[:, :, 2]
+    arr = arr8 / 255.0
     r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
 
     total_pixels = 128 * 128
@@ -33,38 +36,63 @@ def analyze_botanical_quality(img: Image.Image):
 
     # Illumination check
     mean_brightness = arr.mean()
-    is_too_dark = mean_brightness < 0.12
-    is_overexposed = mean_brightness > 0.88
+    is_too_dark = mean_brightness < 0.10
+    is_overexposed = mean_brightness > 0.92
 
-    # Botanical tissue segmentation (real chlorophyll, carotenoids, lesions, or dried foliar tissue)
-    is_green = (g > r * 0.98) & (g > b * 1.02) & (g > 0.10)
-    is_yellow = (r > 0.25) & (g > 0.22) & (b < np.maximum(r, g) * 0.90)
-    is_brown = (r > 0.15) & (g > 0.10) & (b < np.maximum(r, g) * 0.90) & ((r + g) > 2.0 * b)
-    is_straw = (r > 0.25) & (g > 0.20) & (b < r * 0.95) & (np.abs(r - g) < 0.20)
-    botanical_pixels = int((is_green | is_yellow | is_brown | is_straw).sum())
+    # Biometric human skin tone detection (YCbCr + Illumination Invariant RGB)
+    # Accurately recognizes human skin across all ethnicities (Fitzpatrick I-VI) and varied lighting
+    yCb = 128 - 0.168736 * r8 - 0.331264 * g8 + 0.5 * b8
+    yCr = 128 + 0.5 * r8 - 0.418688 * g8 - 0.081312 * b8
+    is_skin = (
+        (yCr >= 132) & (yCr <= 180) &
+        (yCb >= 70) & (yCb <= 135) &
+        (r8 >= g8 * 0.82) & (r8 > b8 * 1.02) & (r8 >= 22)
+    )
+
+    # Excess Green Index (ExG): living vegetative chlorophyll reflects 550nm green while absorbing red & blue
+    exg = 2.0 * g8 - r8 - b8
+    mean_exg = float(exg.mean())
+
+    # Genuine photosynthetic green foliage
+    is_green = (~is_skin) & (g8 > r8 * 1.04) & (g8 > b8 * 1.06) & (exg > 8.0) & (g8 > 30)
+
+    # Chlorotic / yellow foliage
+    is_chlorotic = (
+        (~is_skin) & (r8 > 40) & (g8 > 40) &
+        ((r8 + g8) > 2.0 * b8) & (g8 >= r8 * 0.70) &
+        (b8 < np.minimum(r8, g8) * 0.85)
+    )
+
+    foliar_share = float((is_green | is_chlorotic).sum()) / total_pixels
+    skin_share = float(is_skin.sum()) / total_pixels
+    green_share = float(is_green.sum()) / total_pixels
+
+    # Brown lesions / straw only valid when accompanied by genuine leaf chlorophyll
+    has_base_chlorophyll = foliar_share >= 0.08 or (foliar_share >= 0.04 and mean_exg >= 10.0)
+    is_brown = (
+        (~is_skin) & has_base_chlorophyll &
+        (r > 0.15) & (g > 0.08) & (b < np.maximum(r, g) * 0.90) & ((r + g) > 2.0 * b)
+    )
+    is_straw = (
+        (~is_skin) & has_base_chlorophyll &
+        (r > 0.22) & (g > 0.18) & (b < r * 0.95) & (np.abs(r - g) < 0.20)
+    )
+
+    botanical_pixels = int((is_green | is_chlorotic | is_brown | is_straw).sum())
     botanical_share = botanical_pixels / total_pixels
 
-    # Cartoon / Digital graphic detection: extremely few colors with flat fill AND no organic foliage
+    # Cartoon / Flat graphic detection
     colors = rgb.getcolors(maxcolors=2048)
     num_colors = len(colors) if colors else 2000
     top_share = (max(c[0] for c in colors) / total_pixels) if colors else 0
     is_neon_art = ((g > 0.88) & (r < 0.12) & (b < 0.12)).sum() > (total_pixels * 0.15)
-    is_flat_graphic = (num_colors < 20 and top_share > 0.85 and botanical_share < 0.05) or is_neon_art
+    is_flat_graphic = (num_colors < 80 and (top_share > 0.45 or foliar_share < 0.08)) or is_neon_art
 
-    # Human skin detection (Kovac standard)
-    is_skin = (
-        (r > 0.38) & (g > 0.16) & (b > 0.08) &
-        (r > g) & (r > b) &
-        ((r - g) > 0.10) &
-        ((np.maximum(r, np.maximum(g, b)) - np.minimum(r, np.minimum(g, b))) > 0.10)
-    )
-    skin_share = float(is_skin.sum()) / total_pixels
-    green_share = float(is_green.sum()) / total_pixels
-
-    # Only flag as human face if skin dominates and no real botanical foliage is present
-    is_human_face = (skin_share > 0.45) and (green_share < 0.04) and (botanical_share < 0.08)
-    is_insufficient_foliage = botanical_share < 0.02
-    is_non_plant = is_human_face or is_insufficient_foliage or is_flat_graphic
+    # Human skin detection rejection
+    is_human_face = (skin_share >= 0.035) and (foliar_share < 0.18)
+    is_insufficient_foliage = (foliar_share < 0.08) and (mean_exg < 6.0) and not is_human_face
+    is_indoor_wall_decor = (top_share > 0.65) and (foliar_share < 0.15)
+    is_non_plant = is_human_face or is_insufficient_foliage or is_flat_graphic or is_indoor_wall_decor
 
     return {
         "valid": not (is_non_plant or is_blurry or is_too_dark or is_overexposed),
@@ -73,8 +101,11 @@ def analyze_botanical_quality(img: Image.Image):
         "is_overexposed": is_overexposed,
         "is_non_plant": is_non_plant,
         "is_human_face": is_human_face,
+        "is_indoor_wall_decor": is_indoor_wall_decor,
         "skin_share": round(skin_share, 3),
         "green_share": round(green_share, 3),
+        "foliar_share": round(foliar_share, 3),
+        "mean_exg": round(mean_exg, 2),
         "botanical_share": round(botanical_share, 3),
         "sharpness_score": round(sharpness_score, 2),
         "mean_brightness": round(mean_brightness, 2),

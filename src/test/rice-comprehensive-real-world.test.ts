@@ -1,0 +1,170 @@
+import { describe, expect, it } from "vitest";
+import { assessPixels } from "../features/crop-care/services/quality";
+
+describe("Rice Pathology & Real-World Foliar Evaluation Suite", () => {
+  const W = 64;
+  const H = 64;
+  const total = W * H;
+
+  it("identifies healthy rice tillering canopy with dense overlapping leaves", () => {
+    const pixels = new Uint8ClampedArray(total * 4);
+    // 85% healthy green foliage, 15% field soil/shadow
+    for (let i = 0; i < total; i++) {
+      const idx = i * 4;
+      if (i < total * 0.85) {
+        // Vibrant rice canopy chlorophyll
+        pixels[idx] = 35 + (i % 15);
+        pixels[idx + 1] = 140 + (i % 25);
+        pixels[idx + 2] = 30 + (i % 12);
+      } else {
+        // Field shadow / mud background
+        pixels[idx] = 45 + (i % 10);
+        pixels[idx + 1] = 42 + (i % 8);
+        pixels[idx + 2] = 32 + (i % 6);
+      }
+      pixels[idx + 3] = 255;
+    }
+
+    const report = assessPixels(pixels, W, H);
+    expect(report.ok).toBe(true);
+    const leafCheck = report.checks.find((c) => c.id === "leaf");
+    expect(leafCheck?.pass).toBe(true);
+    expect(report.greenShare).toBeGreaterThanOrEqual(0.70);
+  });
+
+  it("identifies rice blast leaf with spindle-shaped lesions and ash centers", () => {
+    const pixels = new Uint8ClampedArray(total * 4);
+    // 65% green rice blade, 25% necrotic brown halo, 10% ash-grey spindle core
+    for (let i = 0; i < total; i++) {
+      const idx = i * 4;
+      if (i < total * 0.65) {
+        // Green blade
+        pixels[idx] = 45 + (i % 12);
+        pixels[idx + 1] = 135 + (i % 18);
+        pixels[idx + 2] = 38 + (i % 10);
+      } else if (i < total * 0.90) {
+        // Necrotic brown halo: R~115, G~65, B~28
+        pixels[idx] = 115 + (i % 8);
+        pixels[idx + 1] = 65 + (i % 6);
+        pixels[idx + 2] = 28 + (i % 4);
+      } else {
+        // Ash-grey core: R~130, G~130, B~128
+        pixels[idx] = 130 + (i % 4);
+        pixels[idx + 1] = 130 + (i % 4);
+        pixels[idx + 2] = 128 + (i % 4);
+      }
+      pixels[idx + 3] = 255;
+    }
+
+    const report = assessPixels(pixels, W, H);
+    expect(report.ok).toBe(true);
+    const leafCheck = report.checks.find((c) => c.id === "leaf");
+    expect(leafCheck?.pass).toBe(true);
+  });
+
+  it("identifies bacterial leaf blight with wavy marginal yellow-to-straw stripes", () => {
+    const pixels = new Uint8ClampedArray(total * 4);
+    // 60% green leaf center, 40% marginal yellow/straw necrotic lesions
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        const isMargin = x < 18 || x > 46;
+        if (isMargin) {
+          // Yellow-to-straw desiccated margin
+          pixels[i] = 160 + (x % 10);
+          pixels[i + 1] = 145 + (y % 10);
+          pixels[i + 2] = 65 + (x % 6);
+        } else {
+          // Green leaf blade
+          pixels[i] = 40 + (x % 8);
+          pixels[i + 1] = 138 + (y % 12);
+          pixels[i + 2] = 35 + (x % 6);
+        }
+        pixels[i + 3] = 255;
+      }
+    }
+
+    const report = assessPixels(pixels, W, H);
+    expect(report.ok).toBe(true);
+    const leafCheck = report.checks.find((c) => c.id === "leaf");
+    expect(leafCheck?.pass).toBe(true);
+  });
+
+  it("identifies brown spot disease with circular brown lesions and chlorotic halos", () => {
+    const pixels = new Uint8ClampedArray(total * 4);
+    for (let i = 0; i < total; i++) {
+      const idx = i * 4;
+      const isSpot = (i % 9 === 0);
+      const isHalo = (i % 9 === 1);
+      if (isSpot) {
+        // Brown necrotic spot
+        pixels[idx] = 105 + (i % 8);
+        pixels[idx + 1] = 60 + (i % 6);
+        pixels[idx + 2] = 26 + (i % 4);
+      } else if (isHalo) {
+        // Chlorotic yellow halo
+        pixels[idx] = 150 + (i % 10);
+        pixels[idx + 1] = 145 + (i % 10);
+        pixels[idx + 2] = 50 + (i % 8);
+      } else {
+        // Healthy leaf tissue
+        pixels[idx] = 48 + (i % 10);
+        pixels[idx + 1] = 136 + (i % 14);
+        pixels[idx + 2] = 38 + (i % 8);
+      }
+      pixels[idx + 3] = 255;
+    }
+
+    const report = assessPixels(pixels, W, H);
+    expect(report.ok).toBe(true);
+    const leafCheck = report.checks.find((c) => c.id === "leaf");
+    expect(leafCheck?.pass).toBe(true);
+  });
+
+  it("strictly rejects dim human selfies under indoor artificial lighting", () => {
+    const pixels = new Uint8ClampedArray(total * 4);
+    // Dim selfie: 40% facial skin, 30% black hair, 30% dark room shadows
+    for (let i = 0; i < total; i++) {
+      const idx = i * 4;
+      if (i < total * 0.40) {
+        // Dim South Asian skin tone: R~62, G~48, B~38
+        pixels[idx] = 62 + (i % 6);
+        pixels[idx + 1] = 48 + (i % 4);
+        pixels[idx + 2] = 38 + (i % 3);
+      } else if (i < total * 0.70) {
+        // Dark hair
+        pixels[idx] = 25 + (i % 4);
+        pixels[idx + 1] = 24 + (i % 4);
+        pixels[idx + 2] = 24 + (i % 4);
+      } else {
+        // Dark indoor background with cyan-grey tint
+        pixels[idx] = 32 + (i % 4);
+        pixels[idx + 1] = 38 + (i % 4);
+        pixels[idx + 2] = 42 + (i % 4);
+      }
+      pixels[idx + 3] = 255;
+    }
+
+    const report = assessPixels(pixels, W, H);
+    expect(report.ok).toBe(false);
+    const leafCheck = report.checks.find((c) => c.id === "leaf");
+    expect(leafCheck?.pass).toBe(false);
+  });
+
+  it("strictly rejects random household objects and furniture without plant foliage", () => {
+    const pixels = new Uint8ClampedArray(total * 4);
+    // Blue jeans / clothing fabric
+    for (let i = 0; i < total; i++) {
+      const idx = i * 4;
+      pixels[idx] = 45 + (i % 8);
+      pixels[idx + 1] = 68 + (i % 10);
+      pixels[idx + 2] = 120 + (i % 15);
+      pixels[idx + 3] = 255;
+    }
+
+    const report = assessPixels(pixels, W, H);
+    expect(report.ok).toBe(false);
+    const leafCheck = report.checks.find((c) => c.id === "leaf");
+    expect(leafCheck?.pass).toBe(false);
+  });
+});
