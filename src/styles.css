@@ -43,7 +43,8 @@
   --color-leaf-soft: var(--field-green-soft);
   --color-leaf-deep: var(--field-green-deep);
   --shadow-forest: var(--forest-shadow);
-  --font-sans: "Manrope", "Noto Sans Devanagari", "Noto Sans Telugu", system-ui, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", "Manrope", "Noto Sans Devanagari", "Noto Sans Telugu", system-ui, sans-serif;
+  --font-apple: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", "Inter", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
@@ -136,6 +137,10 @@ button { color: inherit; }
 :where(a, button, input, textarea, select, [tabindex]):focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 
 /* App-wide helpers only; layouts live in Tailwind utilities. */
+.font-apple {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", "Inter", sans-serif;
+  letter-spacing: -0.03em;
+}
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }

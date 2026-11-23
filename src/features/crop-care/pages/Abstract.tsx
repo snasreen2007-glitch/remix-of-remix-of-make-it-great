@@ -68,7 +68,7 @@ export function AbstractPage() {
         </div>
 
         <div className="space-y-3">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-foreground font-serif leading-tight">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-[-0.03em] text-foreground font-apple leading-tight">
             KisanAI: An Offline-First Edge Artificial Intelligence Architecture for Real-Field Rice &amp; Chilli Crop Pathology and Vernacular Diagnostics
           </h1>
           <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">

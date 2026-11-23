@@ -934,7 +934,7 @@ export function AssistantPage() {
               </div>
 
               <div className="max-w-lg space-y-1.5 px-2">
-                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground font-serif">
+                <h2 className="text-xl sm:text-2xl font-bold tracking-[-0.02em] text-foreground font-apple">
                   {currentGreeting.title}
                 </h2>
                 <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">

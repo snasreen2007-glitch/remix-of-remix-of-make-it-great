@@ -79,8 +79,6 @@ async function main() {
     ],
   });
 
-  const page = await browser.newPage();
-  await page.setViewport({ width: 1280, height: 860, deviceScaleFactor: 2 });
 
   // Prepare Mock Scans for the 5 verified user Rice images + Mismatch + OOD Selfie
   const imgBlast1 = getBase64Image("media_1795426235738_facac3c7.png");
@@ -317,64 +315,64 @@ async function main() {
     },
   ];
 
-  // Navigate to root first and inject state into localStorage
-  await page.goto(`http://localhost:${PORT}/index.html#/`, { waitUntil: "networkidle0" });
-  await page.evaluate((scans, msgs) => {
-    localStorage.setItem("oaca.settings.v1", JSON.stringify({
-      onboarded: true,
-      name: "Ayub Farmer",
-      lang: "en",
-      theme: "light",
-      state: "Andhra Pradesh",
-      district: "Guntur",
-      season: "kharif",
-      crops: ["rice", "chilli"],
-      llmProvider: "auto",
-      geminiApiKey: "",
-      groqApiKey: "",
-      openaiApiKey: "",
-      customModel: "",
-    }));
-    localStorage.setItem("oaca.scans.v1", JSON.stringify(scans));
-    localStorage.setItem("oaca.chat.v1", JSON.stringify(msgs));
-    localStorage.setItem("oaca.saved.v1", JSON.stringify([
-      { id: "s-1", kind: "topic", crop: "rice", slug: "rice-blast", savedAt: new Date().toISOString() },
-      { id: "s-2", kind: "topic", crop: "chilli", slug: "leaf-curl", savedAt: new Date().toISOString() },
-    ]));
-  }, mockScans, mockMessages);
-
-  console.log("LocalStorage initialized. Capturing screenshot suite...");
+  console.log("Beginning capture of 24 distinct app screens...");
 
   const targets = [
-    { file: "01_home_dashboard.png", hash: "#/", delay: 1200, title: "Home Dashboard & Field Overview" },
-    { file: "02_diagnose_rice_mode.png", hash: "#/diagnose?crop=rice&mode=disease", delay: 1000, title: "Diagnose Mode - Rice Leaf Camera Viewfinder" },
-    { file: "03_diagnose_chilli_mode.png", hash: "#/diagnose?crop=chilli&mode=disease", delay: 1000, title: "Diagnose Mode - Chilli Plant Camera Viewfinder" },
-    { file: "04_scan_result_rice_blast_1.png", hash: "#/scans/scan-blast-1", delay: 1500, title: "Validated Rice Blast #1 - Spindle Lesion & SES Grade 7" },
-    { file: "05_scan_result_rice_blast_2.png", hash: "#/scans/scan-blast-2", delay: 1500, title: "Validated Rice Blast #2 - Crossing Canopy & Severe Grade 9" },
-    { file: "06_scan_result_rice_blast_3.png", hash: "#/scans/scan-blast-3", delay: 1500, title: "Validated Rice Blast #3 - Foliar Lesions" },
-    { file: "07_scan_result_brown_spot_4.png", hash: "#/scans/scan-brown-4", delay: 1500, title: "Validated Brown Spot #4 - Circular Lesions & Chlorotic Halos" },
-    { file: "08_scan_result_brown_spot_5.png", hash: "#/scans/scan-brown-5", delay: 1500, title: "Validated Brown Spot #5 - Dispersed Spot Necrosis" },
-    { file: "09_crop_mismatch_chilli_in_rice.png", hash: "#/scans/scan-mismatch-chilli", delay: 1500, title: "Crop Mismatch - Chilli Detected in Rice Mode with 1-Click Routing" },
-    { file: "10_crop_mismatch_rice_in_chilli.png", hash: "#/scans/scan-mismatch-rice", delay: 1500, title: "Crop Mismatch - Rice Blade Detected in Chilli Mode with 1-Click Routing" },
-    { file: "11_ood_selfie_rejection.png", hash: "#/scans/scan-ood-selfie", delay: 1500, title: "Out-Of-Distribution Rejection - Human Face Skin Tone Rejection" },
-    { file: "12_treatment_and_cure_plan.png", hash: "#/scans/scan-blast-1", delay: 1500, scrollDown: 450, title: "Biological IPM Treatment Protocol & AWD Cultural Plan" },
-    { file: "13_assistant_fullscreen_chat.png", hash: "#/assistant", delay: 1500, title: "Fullscreen Vernacular Agronomic Chatbot" },
-    { file: "14_crop_library_rice.png", hash: "#/library?crop=rice", delay: 1000, title: "Rice Crop Pathology & Pest Dossier Library" },
-    { file: "15_crop_library_chilli.png", hash: "#/library?crop=chilli", delay: 1000, title: "Chilli Crop Health & Vector IPM Library" },
-    { file: "16_topic_detail_rice_blast.png", hash: "#/library/rice/rice-blast", delay: 1200, title: "Disease Dossier - Rice Blast Pathology & Cultural Strategy" },
-    { file: "17_topic_detail_leaf_curl.png", hash: "#/library/chilli/leaf-curl", delay: 1200, title: "Disease Dossier - Chilli Leaf Curl Begomovirus & Vector IPM" },
-    { file: "18_field_scan_history.png", hash: "#/history", delay: 1200, title: "Encrypted Offline Scan History Vault" },
-    { file: "19_mandi_market_prices.png", hash: "#/market", delay: 1000, title: "Agricultural Mandi Market Rates & APMC Trends" },
-    { file: "20_harvest_yield_estimator.png", hash: "#/yield-estimator", delay: 1000, title: "Harvest Loss & Yield Estimation Calculator" },
-    { file: "21_weather_agronomic_advisory.png", hash: "#/weather", delay: 1000, title: "Agricultural Weather & Microclimate Humidity Forecast" },
-    { file: "22_research_abstract_page.png", hash: "#/abstract", delay: 1500, title: "Peer-Reviewed Research Abstract & Architecture Specification" },
-    { file: "23_home_dashboard_mobile.png", hash: "#/", width: 412, height: 915, delay: 1200, title: "Mobile Layout - Responsive Android App View" },
-    { file: "24_assistant_mobile_chat.png", hash: "#/assistant", width: 412, height: 915, delay: 1200, title: "Mobile Layout - Vernacular Assistant on Android Screen" },
+    { file: "01_home_dashboard.png", hash: "#/", delay: 1800, title: "Home Dashboard & Field Overview" },
+    { file: "02_diagnose_rice_mode.png", hash: "#/diagnose?crop=rice&mode=disease", delay: 1800, title: "Diagnose Mode - Rice Leaf Camera Viewfinder" },
+    { file: "03_diagnose_chilli_mode.png", hash: "#/diagnose?crop=chilli&mode=disease", delay: 1800, title: "Diagnose Mode - Chilli Plant Camera Viewfinder" },
+    { file: "04_scan_result_rice_blast_1.png", hash: "#/scans/scan-blast-1", delay: 2000, title: "Validated Rice Blast #1 - Spindle Lesion & SES Grade 7" },
+    { file: "05_scan_result_rice_blast_2.png", hash: "#/scans/scan-blast-2", delay: 2000, title: "Validated Rice Blast #2 - Crossing Canopy & Severe Grade 9" },
+    { file: "06_scan_result_rice_blast_3.png", hash: "#/scans/scan-blast-3", delay: 2000, title: "Validated Rice Blast #3 - Foliar Lesions" },
+    { file: "07_scan_result_brown_spot_4.png", hash: "#/scans/scan-brown-4", delay: 2000, title: "Validated Brown Spot #4 - Circular Lesions & Chlorotic Halos" },
+    { file: "08_scan_result_brown_spot_5.png", hash: "#/scans/scan-brown-5", delay: 2000, title: "Validated Brown Spot #5 - Dispersed Spot Necrosis" },
+    { file: "09_crop_mismatch_chilli_in_rice.png", hash: "#/scans/scan-mismatch-chilli", delay: 2000, title: "Crop Mismatch - Chilli Detected in Rice Mode with 1-Click Routing" },
+    { file: "10_crop_mismatch_rice_in_chilli.png", hash: "#/scans/scan-mismatch-rice", delay: 2000, title: "Crop Mismatch - Rice Blade Detected in Chilli Mode with 1-Click Routing" },
+    { file: "11_ood_selfie_rejection.png", hash: "#/scans/scan-ood-selfie", delay: 2000, title: "Out-Of-Distribution Rejection - Human Face Skin Tone Rejection" },
+    { file: "12_treatment_and_cure_plan.png", hash: "#/scans/scan-blast-1", delay: 2000, scrollDown: 500, title: "Biological IPM Treatment Protocol & AWD Cultural Plan" },
+    { file: "13_assistant_fullscreen_chat.png", hash: "#/assistant", delay: 2000, title: "Fullscreen Vernacular Agronomic Chatbot" },
+    { file: "14_crop_library_rice.png", hash: "#/library?crop=rice", delay: 1800, title: "Rice Crop Pathology & Pest Dossier Library" },
+    { file: "15_crop_library_chilli.png", hash: "#/library?crop=chilli", delay: 1800, title: "Chilli Crop Health & Vector IPM Library" },
+    { file: "16_topic_detail_rice_blast.png", hash: "#/library/rice/rice-blast", delay: 1800, title: "Disease Dossier - Rice Blast Pathology & Cultural Strategy" },
+    { file: "17_topic_detail_leaf_curl.png", hash: "#/library/chilli/leaf-curl", delay: 1800, title: "Disease Dossier - Chilli Leaf Curl Begomovirus & Vector IPM" },
+    { file: "18_field_scan_history.png", hash: "#/history", delay: 1800, title: "Encrypted Offline Scan History Vault" },
+    { file: "19_mandi_market_prices.png", hash: "#/market", delay: 1800, title: "Agricultural Mandi Market Rates & APMC Trends" },
+    { file: "20_harvest_yield_estimator.png", hash: "#/yield-estimator", delay: 1800, title: "Harvest Loss & Yield Estimation Calculator" },
+    { file: "21_weather_agronomic_advisory.png", hash: "#/weather", delay: 1800, title: "Agricultural Weather & Microclimate Humidity Forecast" },
+    { file: "22_research_abstract_page.png", hash: "#/abstract", delay: 2200, title: "Peer-Reviewed Research Abstract & Architecture Specification" },
+    { file: "23_home_dashboard_mobile.png", hash: "#/", width: 412, height: 915, delay: 1800, title: "Mobile Layout - Responsive Android App View" },
+    { file: "24_assistant_mobile_chat.png", hash: "#/assistant", width: 412, height: 915, delay: 1800, title: "Mobile Layout - Vernacular Assistant on Android Screen" },
   ];
 
   for (let i = 0; i < targets.length; i++) {
     const t = targets[i];
     console.log(`[${i + 1}/${targets.length}] Capturing ${t.file} (${t.title})...`);
+
+    const page = await browser.newPage();
+    await page.evaluateOnNewDocument((scans, msgs) => {
+      localStorage.setItem("kisanai_welcome_completed", "true");
+      localStorage.setItem("oaca.settings.v1", JSON.stringify({
+        onboarded: true,
+        name: "Ayub Farmer",
+        lang: "en",
+        theme: "light",
+        state: "Andhra Pradesh",
+        district: "Guntur",
+        season: "kharif",
+        crops: ["rice", "chilli"],
+        llmProvider: "auto",
+        geminiApiKey: "",
+        groqApiKey: "",
+        openaiApiKey: "",
+        customModel: "",
+      }));
+      localStorage.setItem("oaca.scans.v1", JSON.stringify(scans));
+      localStorage.setItem("oaca.chat.v1", JSON.stringify(msgs));
+      localStorage.setItem("oaca.saved.v1", JSON.stringify([
+        { id: "s-1", kind: "topic", crop: "rice", slug: "rice-blast", savedAt: new Date().toISOString() },
+        { id: "s-2", kind: "topic", crop: "chilli", slug: "leaf-curl", savedAt: new Date().toISOString() },
+      ]));
+    }, mockScans, mockMessages);
 
     if (t.width && t.height) {
       await page.setViewport({ width: t.width, height: t.height, deviceScaleFactor: 2 });
@@ -382,17 +380,35 @@ async function main() {
       await page.setViewport({ width: 1280, height: 860, deviceScaleFactor: 2 });
     }
 
-    await page.goto(`http://localhost:${PORT}/index.html${t.hash}`, { waitUntil: "domcontentloaded" });
-    await new Promise((r) => setTimeout(r, t.delay || 1000));
+    try {
+      await page.goto(`http://localhost:${PORT}/index.html${t.hash}`, { waitUntil: "domcontentloaded", timeout: 15000 });
+      await new Promise((r) => setTimeout(r, t.delay || 1500));
 
-    if (t.scrollDown) {
-      await page.evaluate((px) => window.scrollBy(0, px), t.scrollDown);
-      await new Promise((r) => setTimeout(r, 400));
+      // Force remove any leftover splash animation overlay if still present
+      await page.evaluate(() => {
+        const splash = document.querySelector('[aria-hidden="true"].fixed');
+        if (splash) splash.remove();
+      });
+
+      if (t.scrollDown) {
+        await page.evaluate((px) => window.scrollBy(0, px), t.scrollDown);
+        await new Promise((r) => setTimeout(r, 400));
+      }
+
+      const headline = await page.evaluate(() => {
+        const el = document.querySelector("h1, h2, h3, [role='heading']");
+        return el ? el.innerText.replace(/\n/g, " ") : document.title;
+      });
+      console.log(`   [Rendered]: ${headline}`);
+
+      const outPath = path.join(SCREENSHOTS_DIR, t.file);
+      await page.screenshot({ path: outPath, fullPage: false });
+      console.log(`   ✓ Saved: ${outPath}`);
+    } catch (err) {
+      console.error(`   ❌ Failed to capture ${t.file}:`, err.message);
+    } finally {
+      await page.close();
     }
-
-    const outPath = path.join(SCREENSHOTS_DIR, t.file);
-    await page.screenshot({ path: outPath, fullPage: false });
-    console.log(`   ✓ Saved: ${outPath}`);
   }
 
   await browser.close();

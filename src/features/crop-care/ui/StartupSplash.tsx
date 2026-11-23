@@ -65,10 +65,10 @@ export function StartupSplash() {
 
         {/* Brand Title */}
         <div className="space-y-1.5">
-          <h1 className="text-3xl font-extrabold tracking-tight font-serif text-foreground">
-            KISAN <span className="text-primary">AI</span>
+          <h1 className="text-3xl font-extrabold tracking-[-0.035em] text-foreground font-apple">
+            Kisan <span className="text-primary font-black">AI</span>
           </h1>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#c57833] dark:text-amber-400">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#c57833] dark:text-amber-400">
             Smarter Ways, Richer Harvests
           </p>
           <p className="text-xs text-muted-foreground pt-1">

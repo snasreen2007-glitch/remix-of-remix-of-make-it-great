@@ -45,11 +45,12 @@ export function Logo({ compact }: { compact?: boolean }) {
         className="size-9 shrink-0 rounded-xl object-contain shadow-xs border border-line bg-[#eae6db]"
       />
       {!compact && (
-        <span className="truncate leading-tight tracking-tight">
-          <span className="block text-base font-bold font-serif tracking-wide text-foreground">
-            KISAN AI
+        <span className="truncate leading-tight">
+          <span className="flex items-center text-base font-extrabold tracking-[-0.03em] text-foreground font-apple">
+            <span>Kisan</span>
+            <span className="text-primary font-black ml-0.5">AI</span>
           </span>
-          <span className="block text-[8px] font-bold uppercase tracking-[0.14em] text-[#c57833] dark:text-amber-400">
+          <span className="block text-[8.5px] font-semibold tracking-[-0.01em] text-[#c57833] dark:text-amber-400">
             Smarter Ways, Richer Harvests
           </span>
         </span>

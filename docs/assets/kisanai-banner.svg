@@ -93,9 +93,9 @@
     </text>
   </g>
 
-  <!-- Main Title: KISAN AI -->
-  <text x="240" y="152" fill="#ffffff" font-family="'IBM Plex Serif', Georgia, serif" font-size="56" font-weight="900" letter-spacing="2">
-    KISAN <tspan fill="url(#emeraldGlow)">AI</tspan>
+  <!-- Main Title: Kisan AI (Apple-Inspired SF Pro Display Typography) -->
+  <text x="240" y="150" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Inter', sans-serif" font-size="62" font-weight="800" letter-spacing="-2">
+    Kisan <tspan fill="url(#emeraldGlow)" font-weight="900">AI</tspan>
   </text>
 
   <!-- Tagline -->
