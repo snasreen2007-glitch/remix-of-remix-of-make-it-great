@@ -119,6 +119,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/profile", label: t("navProfile"), icon: UserRound, exact: false },
   ] as const;
   const more = [
+    { to: "/abstract", label: "Research Abstract", icon: Sparkles },
     { to: "/weather", label: t("navWeather"), icon: CloudSun },
     { to: "/calculator", label: t("navCalculator"), icon: Calculator },
     { to: "/yield-estimator", label: t("navYield"), icon: TrendingUp },

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AbstractRouteImport } from './routes/abstract'
 import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as CalculatorRouteImport } from './routes/calculator'
 import { Route as HelpRouteImport } from './routes/help'
@@ -30,6 +31,11 @@ import { Route as LibraryCropSlugRouteImport } from './routes/library.$crop.$slu
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AbstractRoute = AbstractRouteImport.update({
+  id: '/abstract',
+  path: '/abstract',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AssistantRoute = AssistantRouteImport.update({
@@ -115,6 +121,7 @@ const LibraryCropSlugRoute = LibraryCropSlugRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/abstract': typeof AbstractRoute
   '/assistant': typeof AssistantRoute
   '/calculator': typeof CalculatorRoute
   '/help': typeof HelpRoute
@@ -134,6 +141,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/abstract': typeof AbstractRoute
   '/assistant': typeof AssistantRoute
   '/calculator': typeof CalculatorRoute
   '/help': typeof HelpRoute
@@ -154,6 +162,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/abstract': typeof AbstractRoute
   '/assistant': typeof AssistantRoute
   '/calculator': typeof CalculatorRoute
   '/help': typeof HelpRoute
@@ -175,6 +184,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/abstract'
     | '/assistant'
     | '/calculator'
     | '/help'
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/abstract'
     | '/assistant'
     | '/calculator'
     | '/help'
@@ -213,6 +224,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/abstract'
     | '/assistant'
     | '/calculator'
     | '/help'
@@ -233,6 +245,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AbstractRoute: typeof AbstractRoute
   AssistantRoute: typeof AssistantRoute
   CalculatorRoute: typeof CalculatorRoute
   HelpRoute: typeof HelpRoute
@@ -258,6 +271,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/abstract': {
+      id: '/abstract'
+      path: '/abstract'
+      fullPath: '/abstract'
+      preLoaderRoute: typeof AbstractRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/assistant': {
@@ -377,6 +397,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AbstractRoute: AbstractRoute,
   AssistantRoute: AssistantRoute,
   CalculatorRoute: CalculatorRoute,
   HelpRoute: HelpRoute,
