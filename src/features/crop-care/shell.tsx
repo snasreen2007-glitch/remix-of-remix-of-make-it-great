@@ -95,6 +95,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const bare = pathname.startsWith("/welcome") || /^\/diagnose\/[^/]+\/[^/]+/.test(pathname) || pathname.endsWith("/report");
+  const isAssistant = pathname.startsWith("/assistant");
 
   useEffect(() => {
     if (ready && !settings.onboarded && !pathname.startsWith("/welcome")) void navigate({ to: "/welcome" });
@@ -192,8 +193,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
           <div className="mt-auto flex gap-2.5 rounded-xl bg-card p-3 text-xs leading-relaxed text-muted-foreground"><ShieldCheck className="size-4 shrink-0 text-primary" />{t("obOff3")}</div>
         </aside>
-        <main id="main" className="min-w-0 px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 lg:px-10 lg:pb-16">
-          <div className="mx-auto w-full max-w-5xl">{children}</div>
+        <main
+          id="main"
+          className={cn(
+            "min-w-0",
+            isAssistant
+              ? "p-0 h-[calc(100dvh-4rem-3.75rem-env(safe-area-inset-bottom))] lg:h-[calc(100dvh-4rem)] overflow-hidden"
+              : "px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 lg:px-10 lg:pb-16"
+          )}
+        >
+          <div className={cn("w-full", isAssistant ? "h-full max-w-none" : "mx-auto max-w-5xl")}>{children}</div>
         </main>
       </div>
 
