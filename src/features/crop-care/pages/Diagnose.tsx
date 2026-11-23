@@ -347,9 +347,11 @@ export function DiagnosePage() {
       setAnalysisStep(5);
 
       setTimeout(() => {
-        // Enforce strict leaf validation: reject human faces and skin
-        const isHumanFace = report?.checks?.find((c) => c.id === "leaf")?.tip?.includes("Human face");
-        const outcome = !isHumanFace && (result.outcome === "identified" || Boolean(result.topicSlug && result.topicSlug !== "unknown")) ? "identified" : "unknown";
+        // Enforce strict leaf validation: reject non-leaves, drawings, human faces, and OOD objects
+        const leafCheck = report?.checks?.find((c) => c.id === "leaf");
+        const isNonLeaf = leafCheck ? !leafCheck.pass : false;
+        const isOOD = result.outcome === "unknown" || result.topicSlug === "unknown";
+        const outcome = (!isNonLeaf && !isOOD && result.outcome === "identified") ? "identified" : "unknown";
 
         const scan: Scan = {
           id: newId(),
@@ -360,12 +362,13 @@ export function DiagnosePage() {
           source: result.source,
           outcome,
           ...(outcome === "identified" && result.topicSlug ? { topicSlug: result.topicSlug } : {}),
-          ...(outcome === "identified" && result.confidence !== undefined ? { confidence: result.confidence } : { confidence: 0.12 }),
-          ...(result.candidates ? { candidates: result.candidates } : {}),
+          confidence: outcome === "identified" ? (result.confidence ?? 0.94) : (result.confidence ?? 0.15),
+          candidates: result.candidates && result.candidates.length > 0 ? result.candidates : (result.topicSlug ? [{ slug: result.topicSlug, confidence: result.confidence ?? 0.3 }] : []),
           ...(outcome === "identified" && result.severity ? { severity: result.severity } : {}),
           ...(result.pestAnalysis ? { pestAnalysis: result.pestAnalysis } : {}),
           ...(result.nutritionAnalysis ? { nutritionAnalysis: result.nutritionAnalysis } : {}),
           ...(report ? { quality: report } : {}),
+          diagnostics: result.diagnostics,
         };
 
         addScan(scan);
@@ -409,8 +412,10 @@ export function DiagnosePage() {
             image: capturedImage,
           });
 
-          const isHumanFace = qualityReport?.checks?.find((c) => c.id === "leaf")?.tip?.includes("Human face");
-          const outcome = !isHumanFace && (result.outcome === "identified" || Boolean(result.topicSlug && result.topicSlug !== "unknown")) ? "identified" : "unknown";
+          const leafCheck = qualityReport?.checks?.find((c) => c.id === "leaf");
+          const isNonLeaf = leafCheck ? !leafCheck.pass : false;
+          const isOOD = result.outcome === "unknown" || result.topicSlug === "unknown";
+          const outcome = (!isNonLeaf && !isOOD && result.outcome === "identified") ? "identified" : "unknown";
 
           const scan: Scan = {
             id: newId(),
@@ -421,16 +426,17 @@ export function DiagnosePage() {
             source: result.source,
             outcome,
             ...(outcome === "identified" && result.topicSlug ? { topicSlug: result.topicSlug } : {}),
-            ...(outcome === "identified" && result.confidence !== undefined ? { confidence: result.confidence } : { confidence: 0.12 }),
+            confidence: outcome === "identified" ? (result.confidence ?? 0.94) : (result.confidence ?? 0.15),
             ...(result.confidenceStatus ? { confidenceStatus: result.confidenceStatus } : {}),
             ...(result.visibleEvidence ? { visibleEvidence: result.visibleEvidence } : {}),
             ...(result.insectDirectlyVisible !== undefined ? { insectDirectlyVisible: result.insectDirectlyVisible } : {}),
             ...(result.severityMethod ? { severityMethod: result.severityMethod } : {}),
-            ...(outcome === "identified" && result.candidates ? { candidates: result.candidates } : {}),
+            candidates: result.candidates && result.candidates.length > 0 ? result.candidates : (result.topicSlug ? [{ slug: result.topicSlug, confidence: result.confidence ?? 0.3 }] : []),
             ...(outcome === "identified" && result.severity ? { severity: result.severity } : {}),
             ...(result.pestAnalysis ? { pestAnalysis: result.pestAnalysis } : {}),
             ...(result.nutritionAnalysis ? { nutritionAnalysis: result.nutritionAnalysis } : {}),
             ...(qualityReport ? { quality: qualityReport } : {}),
+            diagnostics: result.diagnostics,
           };
 
           addScan(scan);

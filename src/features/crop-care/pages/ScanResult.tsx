@@ -123,11 +123,11 @@ export function ScanResultPage() {
   const [isGeneratingCure, setIsGeneratingCure] = useState(false);
 
   // Live predicted diagnosis directly from the on-device model
-  const isIdentified = scan ? scan.outcome === "identified" : false;
-  const isUnknown = scan ? scan.outcome === "unknown" : false;
-  const isUnanalysed = scan ? scan.outcome === "unanalysed" : false;
-  const topicSlug = isIdentified && scan?.topicSlug ? scan.topicSlug : undefined;
+  const topicSlug = scan?.topicSlug && scan.topicSlug !== "unknown" ? scan.topicSlug : undefined;
   const topic = scan && topicSlug ? getTopic(scan.crop, topicSlug) : null;
+  const isIdentified = Boolean(scan && scan.outcome === "identified" && topic);
+  const isUnknown = Boolean(scan && (scan.outcome === "unknown" || !topic) && scan.outcome !== "unanalysed");
+  const isUnanalysed = Boolean(scan && scan.outcome === "unanalysed");
 
   const pestInfo = useMemo(() => {
     if (!scan) return null;
@@ -1085,7 +1085,7 @@ Note: ${note || "No specific farmer notes recorded."}
                   </div>
                 </div>
                 {scan.severity && (
-                  <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold uppercase", bandColor[scan.severity.band])}>
+                  <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold uppercase", bandColor[scan.severity.band || "moderate"] || "text-amber")}>
                     {severityLabel(scan.severity)}
                   </span>
                 )}
@@ -1517,13 +1517,13 @@ Note: ${note || "No specific farmer notes recorded."}
                 <span
                   className={cn(
                     "text-4xl font-bold font-mono",
-                    bandColor[scan.severity.band],
+                    bandColor[scan.severity.band || "moderate"] || "text-amber",
                   )}
                 >
                   {severityLabel(scan.severity)}
                 </span>
                 <span className="block mt-1 text-xs uppercase font-bold text-muted-foreground">
-                  Band: {t(bandKey[scan.severity.band])}
+                  Band: {t(bandKey[scan.severity.band || "moderate"] || "moderate")}
                 </span>
               </div>
 
@@ -1641,7 +1641,7 @@ Note: ${note || "No specific farmer notes recorded."}
                 {scan.severity && (
                   <span className="block font-mono text-xs text-primary">
                     Severity: {severityLabel(scan.severity)} (
-                    {t(bandKey[scan.severity.band])})
+                    {t(bandKey[scan.severity.band || "moderate"] || "moderate")})
                   </span>
                 )}
               </div>

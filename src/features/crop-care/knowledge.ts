@@ -936,8 +936,9 @@ export function topicsFor(crop: CropKey, kind?: Mode): Topic[] {
   return topics.filter((topic) => topic.crop === crop && (!kind || topic.kind === kind));
 }
 
-export function l(lang: Lang, value: L10n): string {
-  return value[lang] ?? value.en;
+export function l(lang: Lang, value?: L10n | null): string {
+  if (!value) return "";
+  return value[lang] ?? value.en ?? "";
 }
 
 export function searchTopics(query: string, filters: { crop?: CropKey; kind?: Mode } = {}): Topic[] {

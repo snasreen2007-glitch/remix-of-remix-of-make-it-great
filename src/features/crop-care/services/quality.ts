@@ -119,21 +119,21 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
   const topColorShare = maxColorOccurrences / n;
   const uniqueColorCount = colorMap.size;
 
-  // Reject flat vector art, drawings, cartoons (only when saturated neon flat art without botanical tissue):
+  // Reject flat vector art, drawings, cartoons, clipart, illustrations
+  // Digital art has low palette diversity, extreme flat color dominance, or high neon saturation
   const isCartoonOrDrawing =
-    (uniqueColorCount < 6 && topColorShare > 0.96 && plantTissueShare < 0.005) ||
-    ((neonCount / n) > 0.35 && plantTissueShare < 0.005);
+    (uniqueColorCount < 80 && (topColorShare > 0.45 || plantTissueShare < 0.08)) ||
+    ((neonCount / n) > 0.05 && plantTissueShare < 0.15);
 
-  // Reject flat painted drywall / artificial indoor wall decor:
-  const isIndoorWallDecor = topColorShare > 0.70 && greenShare < 0.22 && lesionShare < 0.05 && plantTissueShare < 0.22;
+  // Reject flat painted drywall / artificial indoor surfaces, desks, monitors
+  const isIndoorWallDecor = topColorShare > 0.65 && plantTissueShare < 0.15;
 
   // Reject human faces, selfies, portraits, and people (human skin presence without dominant crop foliage)
-  // Any photo with >= 6% human skin tone and < 15% green foliage is a person, not a crop leaf
-  const isHumanFace = (skinCount / n) >= 0.06 && greenShare < 0.15;
+  const isHumanFace = (skinCount / n) >= 0.05 && greenShare < 0.18;
 
   // Support true monochrome/black-and-white photos of leaves if they possess genuine foliar sharpness and edge contrast
   const isTrueMonochromeLeaf = (avgChroma < 1.5) && sharpness >= 20 && contrast >= 14;
-  const isMissingBotanicalFoliage = (plantTissueShare < 0.04 || (greenShare < 0.02 && chloroticShare < 0.04)) && !isTrueMonochromeLeaf && !isHumanFace && !isCartoonOrDrawing && !isIndoorWallDecor;
+  const isMissingBotanicalFoliage = (plantTissueShare < 0.08) && !isTrueMonochromeLeaf && !isHumanFace && !isCartoonOrDrawing && !isIndoorWallDecor;
 
   const leafOk = !isCartoonOrDrawing && !isHumanFace && !isIndoorWallDecor && !isMissingBotanicalFoliage;
 

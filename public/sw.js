@@ -31,7 +31,14 @@ self.addEventListener("install", (event) => {
       .open(CACHE_NAME)
       .then(async (cache) => {
         const core = ["/", "/manifest.webmanifest", "/favicon.ico", "/favicon.svg", "/logo.svg"];
-        await cache.addAll(core).catch((e) => console.warn("Core cache prefill warning:", e));
+        await Promise.allSettled(
+          core.map(async (r) => {
+            try {
+              const res = await fetch(r);
+              if (res && res.status === 200) await cache.put(r, res);
+            } catch {}
+          })
+        );
 
         await Promise.allSettled(
           OFFLINE_ROUTES.filter((r) => !core.includes(r)).map(async (route) => {

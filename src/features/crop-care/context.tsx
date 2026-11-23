@@ -217,12 +217,6 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const bridge = getNativeBridge();
-    if (bridge?.ask) {
-      bridge.ask({ question, context: llamaRes.text, lang: settings.lang }).then(finish).catch(() => finish(llamaRes.text));
-      return;
-    }
-
     // Structured Diagnosis Context creation
     const diagContext: DiagnosisContext | null = ctx ? {
       crop: ctx.crop ?? "rice",
@@ -243,7 +237,23 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
     } : null;
 
     // Use AI Engine Router for Hybrid Online/Offline execution
-    import("./services/ai-router").then(({ aiRouter }) => {
+    import("./services/ai-router").then(async ({ aiRouter }) => {
+      const isDeviceOnline = typeof navigator !== "undefined" ? navigator.onLine : false;
+
+      // When strictly offline in Android APK, prioritize native bridge if available
+      if (!isDeviceOnline) {
+        const bridge = getNativeBridge();
+        if (bridge?.ask) {
+          try {
+            const ans = await bridge.ask({ question, context: llamaRes.text, lang: settings.lang });
+            if (ans && ans.length > 5) {
+              finish(ans);
+              return;
+            }
+          } catch {}
+        }
+      }
+
       // Sync engine mode from user settings
       if (settings.llmProvider === "local" || settings.llmProvider === "ollama") {
         aiRouter.setMode("offline");
@@ -266,10 +276,31 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
         lang: settings.lang,
       }).then((result) => {
         finish(result.text);
-      }).catch(() => {
+      }).catch(async () => {
+        // Fallback to native bridge if present, else local on-device RAG
+        const bridge = getNativeBridge();
+        if (bridge?.ask) {
+          try {
+            const ans = await bridge.ask({ question, context: llamaRes.text, lang: settings.lang });
+            if (ans && ans.length > 5) {
+              finish(ans);
+              return;
+            }
+          } catch {}
+        }
         finish(llamaRes.text);
       });
-    }).catch(() => {
+    }).catch(async () => {
+      const bridge = getNativeBridge();
+      if (bridge?.ask) {
+        try {
+          const ans = await bridge.ask({ question, context: llamaRes.text, lang: settings.lang });
+          if (ans && ans.length > 5) {
+            finish(ans);
+            return;
+          }
+        } catch {}
+      }
       finish(llamaRes.text);
     });
   }, [settings, online, messages]);

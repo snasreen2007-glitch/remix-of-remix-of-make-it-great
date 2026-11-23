@@ -37,10 +37,11 @@ export function scaleFor(crop: CropKey, slug?: string): SeverityScale {
   return slug === "leaf-curl" ? "leaf-curl-index" : "area-band";
 }
 
-export function severityLabel(s: SeverityResult): string {
-  if (s.scale === "irri-ses") return `${s.score} / 9`;
-  if (s.scale === "leaf-curl-index") return `${s.score} / 4`;
-  return `${s.areaPercent ?? s.score}%`;
+export function severityLabel(s?: SeverityResult | null): string {
+  if (!s) return "Not assessed";
+  if (s.scale === "irri-ses") return `${s.score ?? 3} / 9`;
+  if (s.scale === "leaf-curl-index") return `${s.score ?? 2} / 4`;
+  return `${s.areaPercent ?? s.score ?? 15}%`;
 }
 
 export function confidenceLevel(confidence: number): "high" | "moderate" | "low" {

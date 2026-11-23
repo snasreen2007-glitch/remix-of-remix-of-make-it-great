@@ -111,15 +111,16 @@ const bandBg: Record<Band, string> = { mild: "bg-leaf", moderate: "bg-amber", se
 
 export function SeverityMeter({ severity, large }: { severity: SeverityResult; large?: boolean }) {
   const { t } = useCropCare();
-  const pct = severity.scale === "area-band" ? Math.min(100, (severity.areaPercent ?? severity.score) * 2) : (severity.score / severity.max) * 100;
+  const band: Band = severity.band || (severity.areaPercent && severity.areaPercent > 25 ? "severe" : severity.areaPercent && severity.areaPercent > 10 ? "moderate" : "mild");
+  const pct = severity.scale === "area-band" ? Math.min(100, (severity.areaPercent ?? severity.score ?? 15) * 2) : severity.max ? ((severity.score || 0) / severity.max) * 100 : 25;
   return (
     <div>
       <div className="flex items-end justify-between gap-3">
-        <span className={cn("font-bold tabular-nums tracking-tight", large ? "text-5xl" : "text-2xl", bandColor[severity.band])}>{severityLabel(severity)}</span>
-        <span className={cn("rounded-full px-3 py-1 text-sm font-semibold", bandColor[severity.band], "bg-current/10")}><span className="text-current">{t(bandKey[severity.band])}</span></span>
+        <span className={cn("font-bold tabular-nums tracking-tight", large ? "text-5xl" : "text-2xl", bandColor[band] || "text-amber")}>{severityLabel(severity)}</span>
+        <span className={cn("rounded-full px-3 py-1 text-sm font-semibold", bandColor[band] || "text-amber", "bg-current/10")}><span className="text-current">{t(bandKey[band] || "moderate")}</span></span>
       </div>
       <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-muted">
-        <div className={cn("h-full rounded-full transition-all duration-700", bandBg[severity.band])} style={{ width: `${Math.max(6, pct)}%` }} />
+        <div className={cn("h-full rounded-full transition-all duration-700", bandBg[band] || "bg-amber")} style={{ width: `${Math.max(6, Math.min(100, pct || 15))}%` }} />
       </div>
     </div>
   );
@@ -236,11 +237,13 @@ export function Confirm({ trigger, title, body, confirmLabel, onConfirm, destruc
   );
 }
 
-export function ListCard({ items, ordered }: { items: string[]; ordered?: boolean }) {
+export function ListCard({ items, ordered }: { items?: string[] | null; ordered?: boolean }) {
+  const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (safeItems.length === 0) return null;
   return (
     <ul className={cn(card, "divide-y divide-line")}>
-      {items.map((item, i) => (
-        <li key={item} className="flex gap-3 p-4 text-[15px] leading-relaxed">
+      {safeItems.map((item, i) => (
+        <li key={`${i}-${item}`} className="flex gap-3 p-4 text-[15px] leading-relaxed">
           {ordered ? <span className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/15 text-xs font-bold text-primary">{i + 1}</span> : <span className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" />}
           <span>{item}</span>
         </li>
