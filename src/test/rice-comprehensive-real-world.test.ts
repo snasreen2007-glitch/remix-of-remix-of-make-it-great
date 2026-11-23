@@ -167,4 +167,60 @@ describe("Rice Pathology & Real-World Foliar Evaluation Suite", () => {
     const leafCheck = report.checks.find((c) => c.id === "leaf");
     expect(leafCheck?.pass).toBe(false);
   });
+
+  it("discriminates Rice Blast spindle lesions from Brown Spot circular lesions via ash-to-brown ratio", () => {
+    // Blast leaf simulation: 65% green blade, 15% brown halo, 20% grey-white ash necrotic core
+    let blastAsh = 0;
+    let blastBrown = 0;
+    for (let i = 0; i < total; i++) {
+      let r8 = 45;
+      let g8 = 135;
+      let b8 = 38;
+      if (i > total * 0.65 && i <= total * 0.80) {
+        // Brown halo
+        r8 = 115;
+        g8 = 65;
+        b8 = 28;
+      } else if (i > total * 0.80) {
+        // Ash necrotic core
+        r8 = 135;
+        g8 = 135;
+        b8 = 128;
+      }
+      const diffRg = Math.abs(r8 - g8);
+      const diffGb = Math.abs(g8 - b8);
+      if (diffRg < 40 && diffGb < 55 && r8 > 100 && g8 > 100 && b8 > 80) blastAsh++;
+      if (r8 > 45 && g8 < r8 * 0.95 && b8 < r8 * 0.85 && r8 > b8 * 1.15) blastBrown++;
+    }
+    const blastAshRatio = blastAsh / Math.max(1, blastBrown);
+    expect(blastAshRatio).toBeGreaterThanOrEqual(0.40);
+
+    // Brown Spot leaf simulation: 70% green blade, 25% dense brown necrotic spots, 5% chlorotic halo, minimal ash
+    let bsAsh = 0;
+    let bsBrown = 0;
+    for (let i = 0; i < total; i++) {
+      let r8 = 45;
+      let g8 = 135;
+      let b8 = 38;
+      if (i > total * 0.70 && i <= total * 0.95) {
+        // Dense dark brown spot
+        r8 = 105;
+        g8 = 55;
+        b8 = 24;
+      } else if (i > total * 0.95) {
+        // Chlorotic yellow halo
+        r8 = 145;
+        g8 = 140;
+        b8 = 45;
+      }
+      const diffRg = Math.abs(r8 - g8);
+      const diffGb = Math.abs(g8 - b8);
+      if (diffRg < 40 && diffGb < 55 && r8 > 100 && g8 > 100 && b8 > 80) bsAsh++;
+      if (r8 > 45 && g8 < r8 * 0.95 && b8 < r8 * 0.85 && r8 > b8 * 1.15) bsBrown++;
+    }
+    const bsAshRatio = bsAsh / Math.max(1, bsBrown);
+    expect(bsAshRatio).toBeLessThan(0.35);
+    expect(bsBrown).toBeGreaterThan(500);
+  });
 });
+

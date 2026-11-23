@@ -138,11 +138,11 @@ export function assessPixels(data: Uint8ClampedArray, width: number, height: num
   const isIndoorWallDecor = topColorShare > 0.65 && plantTissueShare < 0.15;
 
   // Reject human faces, selfies, portraits, and people (human skin presence without dominant crop foliage)
-  const isHumanFace = skinShare >= 0.035 && foliageShare < 0.18;
+  const isHumanFace = (skinShare >= 0.035 && foliageShare < 0.18) || (skinShare >= 0.020 && foliageShare < 0.10);
 
   // Support true monochrome/black-and-white photos of leaves if they possess genuine foliar sharpness and edge contrast
   const isTrueMonochromeLeaf = (avgChroma < 1.5) && sharpness >= 20 && contrast >= 14;
-  const isMissingBotanicalFoliage = (foliageShare < 0.08 && meanExg < 6.0) && !isTrueMonochromeLeaf && !isHumanFace && !isCartoonOrDrawing && !isIndoorWallDecor;
+  const isMissingBotanicalFoliage = (foliageShare < 0.08 || (foliageShare < 0.15 && meanExg < 15.0)) && !isTrueMonochromeLeaf && !isHumanFace && !isCartoonOrDrawing && !isIndoorWallDecor;
 
   const leafOk = !isCartoonOrDrawing && !isHumanFace && !isIndoorWallDecor && !isMissingBotanicalFoliage;
 

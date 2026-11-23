@@ -89,8 +89,8 @@ def analyze_botanical_quality(img: Image.Image):
     is_flat_graphic = (num_colors < 80 and (top_share > 0.45 or foliar_share < 0.08)) or is_neon_art
 
     # Human skin detection rejection
-    is_human_face = (skin_share >= 0.035) and (foliar_share < 0.18)
-    is_insufficient_foliage = (foliar_share < 0.08) and (mean_exg < 6.0) and not is_human_face
+    is_human_face = ((skin_share >= 0.035) and (foliar_share < 0.18)) or ((skin_share >= 0.020) and (foliar_share < 0.10))
+    is_insufficient_foliage = ((foliar_share < 0.08) or (foliar_share < 0.15 and mean_exg < 15.0)) and not is_human_face
     is_indoor_wall_decor = (top_share > 0.65) and (foliar_share < 0.15)
     is_non_plant = is_human_face or is_insufficient_foliage or is_flat_graphic or is_indoor_wall_decor
 
@@ -176,8 +176,9 @@ def analyze_rice_leaf_features(img: Image.Image):
     - Healthy foliage: High photosynthetic green ratio, minimal necrotic pixels.
     """
     img_rgb = img.convert("RGB").resize((128, 128))
-    arr = np.array(img_rgb, dtype=np.float32) / 255.0
-    r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+    arr = np.array(img_rgb, dtype=np.float32)
+    r8, g8, b8 = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+    r, g, b = r8 / 255.0, g8 / 255.0, b8 / 255.0
 
     # Margin vs Center spatial masks
     mask_margin = np.zeros((128, 128), dtype=bool)
@@ -186,16 +187,24 @@ def analyze_rice_leaf_features(img: Image.Image):
     mask_margin[:, :24] = True
     mask_margin[:, -24:] = True
 
-    # Ash/grey cores typical of mature Blast spindle lesions
-    is_ash_core = (np.abs(r - g) < 0.07) & (np.abs(g - b) < 0.07) & (r > 0.40) & (r < 0.72)
+    # Biometric human skin exclusion (YCbCr + Illumination Invariant RGB)
+    ycb = 128 - 0.168736 * r8 - 0.331264 * g8 + 0.5 * b8
+    ycr = 128 + 0.5 * r8 - 0.418688 * g8 - 0.081312 * b8
+    is_skin = (ycr >= 132) & (ycr <= 180) & (ycb >= 70) & (ycb <= 135) & (r8 >= g8 * 0.82) & (r8 > b8 * 1.02) & (r8 >= 22)
+
+    diff_rg8 = np.abs(r8 - g8)
+    diff_gb8 = np.abs(g8 - b8)
+
+    # Ash/grey cores typical of mature Blast spindle lesions (exclude skin)
+    is_ash_core = (~is_skin) & (diff_rg8 < 40) & (diff_gb8 < 55) & (r8 > 100) & (g8 > 100) & (b8 > 80)
     ash_count = int(is_ash_core.sum())
 
-    # Brown necrotic lesion centers
-    is_brown = (r > 0.22) & (g < r * 0.92) & (b < 0.24) & (r > b * 1.25)
+    # Brown necrotic lesion centers (exclude skin)
+    is_brown = (~is_skin) & (r8 > 45) & (g8 < r8 * 0.95) & (b8 < r8 * 0.85) & (r8 > b8 * 1.15)
     brown_count = int(is_brown.sum())
 
-    # Yellow chlorotic halos / streaks
-    is_yellow = (r > 0.38) & (g > 0.35) & (b < 0.28) & (r > b * 1.3)
+    # Yellow chlorotic halos / streaks (exclude skin)
+    is_yellow = (~is_skin) & (r8 > 110) & (g8 > 95) & (b8 < 85) & ((r8 + g8) > 2.2 * b8)
     yellow_count = int(is_yellow.sum())
 
     # Marginal vs central distribution of chlorotic/necrotic tissue
@@ -204,12 +213,12 @@ def analyze_rice_leaf_features(img: Image.Image):
     marginal_brown = int((is_brown & mask_margin).sum())
     central_brown = int((is_brown & (~mask_margin)).sum())
 
-    # Orange-yellow discoloration (Tungro)
-    is_orange = (r > 0.45) & (g > 0.25) & (g < r * 0.88) & (b < 0.30)
+    # Orange-yellow discoloration (Tungro, exclude skin)
+    is_orange = (~is_skin) & (r8 > 140) & (g8 > 60) & (g8 < r8 * 0.80) & (b8 < 75)
     orange_count = int(is_orange.sum())
 
     # Green photosynthetic tissue
-    is_green = (g > r * 1.06) & (g > b * 1.06) & (g > 0.16)
+    is_green = (~is_skin) & (g > r * 1.06) & (g > b * 1.06) & (g > 0.16)
     green_count = int(is_green.sum())
     total_plant = green_count + yellow_count + brown_count + ash_count + orange_count
 
@@ -479,105 +488,10 @@ def hierarchical_predict(img: Image.Image, crop="rice", raw_class_probs=None):
         center_y = r_feats["central_yellow"]
         orange = r_feats["orange_count"]
 
-        # Case 0: Real-Field Trained Model Fusion if probabilities provided
-        if raw_class_probs and len(raw_class_probs) > 0:
-            top_hgb = raw_class_probs[0]
-            if top_hgb["confidence"] >= 0.35 and top_hgb["slug"] != "unknown":
-                top_slug = top_hgb["slug"]
-                if top_slug == "rice-healthy":
-                    return {
-                        "crop": "Rice",
-                        "plant_part": "Leaf",
-                        "primary_prediction": "Healthy Rice Foliage",
-                        "topicSlug": "rice-healthy",
-                        "confidence": min(0.95, top_hgb["confidence"]),
-                        "confidence_status": "calibrated",
-                        "visible_evidence": ["Uniform emerald-green leaf blade without chlorotic or necrotic lesion development"],
-                        "insect_directly_visible": False,
-                        "image_quality": "good",
-                        "severity": {"percentage": 0.0, "band": "none", "scope": "visible_leaf_sample", "method": "healthy_leaf"},
-                        "diagnosis_status": "confirmed_healthy",
-                        "alternative_predictions": raw_class_probs[1:4],
-                    }
-                elif top_slug == "brown-spot" and orange < 40:
-                    return {
-                        "crop": "Rice",
-                        "plant_part": "Leaf",
-                        "primary_prediction": "Brown Spot (Bipolaris oryzae)",
-                        "topicSlug": "brown-spot",
-                        "confidence": min(0.92, max(0.70, top_hgb["confidence"])),
-                        "confidence_status": "calibrated",
-                        "visible_evidence": [
-                            "Circular-to-oval brown necrotic spots evenly dispersed on leaf blade",
-                            "Distinct yellow chlorotic halos encircling dark brown spots",
-                        ],
-                        "insect_directly_visible": False,
-                        "image_quality": "good",
-                        "severity": {"percentage": area_pct, "band": severity_band, "scope": "visible_leaf_sample", "method": severity_method},
-                        "diagnosis_status": "possible",
-                        "alternative_predictions": raw_class_probs[1:4],
-                    }
-                elif top_slug == "rice-blast":
-                    return {
-                        "crop": "Rice",
-                        "plant_part": "Leaf",
-                        "primary_prediction": "Rice Blast (Magnaporthe oryzae)",
-                        "topicSlug": "rice-blast",
-                        "confidence": min(0.92, max(0.70, top_hgb["confidence"])),
-                        "confidence_status": "calibrated",
-                        "visible_evidence": [
-                            "Typical diamond / spindle-shaped lesions pointed at both longitudinal ends",
-                            "Greyish-white ash core surrounded by dark reddish-brown necrotic margin",
-                        ],
-                        "insect_directly_visible": False,
-                        "image_quality": "good",
-                        "severity": {"percentage": area_pct, "band": severity_band, "scope": "visible_leaf_sample", "method": severity_method},
-                        "diagnosis_status": "possible",
-                        "alternative_predictions": raw_class_probs[1:4],
-                    }
-                elif top_slug == "bacterial-leaf-blight":
-                    return {
-                        "crop": "Rice",
-                        "plant_part": "Leaf",
-                        "primary_prediction": "Bacterial Leaf Blight (Xanthomonas oryzae)",
-                        "topicSlug": "bacterial-leaf-blight",
-                        "confidence": min(0.92, max(0.70, top_hgb["confidence"])),
-                        "confidence_status": "calibrated",
-                        "visible_evidence": [
-                            "Wavy, water-soaked marginal yellow-to-straw lesions advancing down leaf margins",
-                            "Lesions initiate near leaf tip and progress toward sheath with undulating border",
-                        ],
-                        "insect_directly_visible": False,
-                        "image_quality": "good",
-                        "severity": {"percentage": area_pct, "band": severity_band, "scope": "visible_leaf_sample", "method": severity_method},
-                        "diagnosis_status": "possible",
-                        "alternative_predictions": raw_class_probs[1:4],
-                    }
-                elif top_slug == "tungro":
-                    return {
-                        "crop": "Rice",
-                        "plant_part": "Leaf",
-                        "primary_prediction": "Rice Tungro Virus",
-                        "topicSlug": "tungro",
-                        "confidence": min(0.90, max(0.68, top_hgb["confidence"])),
-                        "confidence_status": "calibrated",
-                        "visible_evidence": [
-                            "Prominent orange-yellow chlorotic discoloration originating from leaf tip",
-                            "Interveinal chlorosis and slight spiraling of upper leaves",
-                        ],
-                        "insect_directly_visible": False,
-                        "image_quality": "good",
-                        "severity": {"percentage": area_pct, "band": severity_band, "scope": "visible_leaf_sample", "method": severity_method},
-                        "diagnosis_status": "possible",
-                        "alternative_predictions": raw_class_probs[1:4],
-                    }
-
-        # Marginal vs central yellow density (margin area = 9984, center area = 6400 in 128x128 grid)
-        margin_density = margin_y / 9984.0
-        center_density = center_y / 6400.0
+        ash_ratio = ash / max(1, brown)
 
         # Case A: Healthy Rice Canopy (high photosynthetic green ratio, minimal necrosis)
-        if green_share >= 0.88 and (brown / max(1, total_p)) < 0.05:
+        if green_share >= 0.85 and (brown / max(1, total_p)) < 0.05 and ash < 40:
             return {
                 "crop": "Rice",
                 "plant_part": "Leaf",
@@ -593,14 +507,14 @@ def hierarchical_predict(img: Image.Image, crop="rice", raw_class_probs=None):
                 "alternative_predictions": [],
             }
 
-        # Case B: Rice Blast (Magnaporthe oryzae) - Prominent ash/grey core in spindle lesions
-        if ash > 60 and ash > brown * 0.35:
+        # Case B: Rice Blast (Magnaporthe oryzae) - Spindle lesions with ash/grey core
+        if (ash > 150 and ash_ratio >= 0.40) or (ash_ratio >= 0.50 and ash > 50) or (ash > 400):
             return {
                 "crop": "Rice",
                 "plant_part": "Leaf",
                 "primary_prediction": "Rice Blast (Magnaporthe oryzae)",
                 "topicSlug": "rice-blast",
-                "confidence": 0.92,
+                "confidence": min(0.96, max(0.88, 0.82 + min(0.14, ash / 2000.0))),
                 "confidence_status": "calibrated",
                 "visible_evidence": [
                     "Typical diamond / spindle-shaped lesions pointed at both longitudinal ends",
@@ -611,36 +525,13 @@ def hierarchical_predict(img: Image.Image, crop="rice", raw_class_probs=None):
                 "severity": {"percentage": area_pct, "band": severity_band, "scope": "visible_leaf_sample", "method": severity_method},
                 "diagnosis_status": "possible",
                 "alternative_predictions": [
-                    {"slug": "brown-spot", "name": "Brown Spot", "confidence": 0.62},
-                    {"slug": "bacterial-leaf-blight", "name": "Bacterial Leaf Blight", "confidence": 0.40},
+                    {"slug": "brown-spot", "name": "Brown Spot", "confidence": 0.55},
+                    {"slug": "bacterial-leaf-blight", "name": "Bacterial Leaf Blight", "confidence": 0.35},
                 ],
             }
 
-        # Case C: Bacterial Leaf Blight (BLB) - Wavy margin yellowing starting from tips
-        if (margin_density > center_density * 1.05 and yellow > total_p * 0.38) or (margin_density > center_density * 1.30 and margin_y > 200):
-            return {
-                "crop": "Rice",
-                "plant_part": "Leaf",
-                "primary_prediction": "Bacterial Leaf Blight (Xanthomonas oryzae)",
-                "topicSlug": "bacterial-leaf-blight",
-                "confidence": 0.91,
-                "confidence_status": "calibrated",
-                "visible_evidence": [
-                    "Wavy, water-soaked marginal yellow-to-straw lesions advancing down leaf margins",
-                    "Lesions initiate near leaf tip and progress toward sheath with undulating border",
-                ],
-                "insect_directly_visible": False,
-                "image_quality": "good",
-                "severity": {"percentage": area_pct, "band": severity_band, "scope": "visible_leaf_sample", "method": severity_method},
-                "diagnosis_status": "possible",
-                "alternative_predictions": [
-                    {"slug": "bacterial-leaf-streak", "name": "Bacterial Leaf Streak", "confidence": 0.58},
-                    {"slug": "rice-blast", "name": "Rice Blast", "confidence": 0.42},
-                ],
-            }
-
-        # Case D: Rice Tungro Virus - Characteristic Orange-Yellow foliar discoloration
-        if orange > 50 and orange > ash:
+        # Case C: Rice Tungro Virus - Characteristic Orange-Yellow foliar discoloration
+        if orange > 400 and orange > brown * 2.5:
             return {
                 "crop": "Rice",
                 "plant_part": "Leaf",
@@ -662,24 +553,67 @@ def hierarchical_predict(img: Image.Image, crop="rice", raw_class_probs=None):
                 ],
             }
 
-        # Case E: Brown Spot (Bipolaris oryzae) - Circular/oval lesions with chlorotic halo
+        # Case D: Brown Spot (Bipolaris oryzae) - Circular/oval lesions with chlorotic halo, low ash ratio
+        if (brown > 80 and ash_ratio < 0.35) or (brown > 300 and ash_ratio < 0.40):
+            return {
+                "crop": "Rice",
+                "plant_part": "Leaf",
+                "primary_prediction": "Brown Spot (Bipolaris oryzae)",
+                "topicSlug": "brown-spot",
+                "confidence": min(0.96, max(0.88, 0.82 + min(0.14, brown / 2000.0))),
+                "confidence_status": "calibrated",
+                "visible_evidence": [
+                    "Circular-to-oval brown necrotic spots evenly dispersed on leaf blade",
+                    "Distinct yellow chlorotic halos encircling dark brown spots",
+                ],
+                "insect_directly_visible": False,
+                "image_quality": "good",
+                "severity": {"percentage": area_pct, "band": severity_band, "scope": "visible_leaf_sample", "method": severity_method},
+                "diagnosis_status": "possible",
+                "alternative_predictions": [
+                    {"slug": "rice-blast", "name": "Rice Blast", "confidence": 0.58},
+                    {"slug": "bacterial-leaf-streak", "name": "Bacterial Leaf Streak", "confidence": 0.44},
+                ],
+            }
+
+        # Case E: Real-Field Trained Model Fusion for canopy / field shots
+        if raw_class_probs and len(raw_class_probs) > 0:
+            top_hgb = raw_class_probs[0]
+            if top_hgb["confidence"] >= 0.25 and top_hgb["slug"] != "unknown":
+                top_slug = top_hgb["slug"]
+                return {
+                    "crop": "Rice",
+                    "plant_part": "Leaf",
+                    "primary_prediction": top_slug.replace("-", " ").title(),
+                    "topicSlug": top_slug,
+                    "confidence": min(0.92, max(0.70, top_hgb["confidence"])),
+                    "confidence_status": "calibrated",
+                    "visible_evidence": [
+                        "Foliar symptoms matching field canopy pathogen profile",
+                    ],
+                    "insect_directly_visible": False,
+                    "image_quality": "good",
+                    "severity": {"percentage": area_pct, "band": severity_band, "scope": "visible_leaf_sample", "method": severity_method},
+                    "diagnosis_status": "possible",
+                    "alternative_predictions": raw_class_probs[1:4],
+                }
+
+        # Fallback Rice diagnosis
         return {
             "crop": "Rice",
             "plant_part": "Leaf",
             "primary_prediction": "Brown Spot (Bipolaris oryzae)",
             "topicSlug": "brown-spot",
-            "confidence": 0.89,
+            "confidence": 0.82,
             "confidence_status": "calibrated",
             "visible_evidence": [
-                "Circular-to-oval brown necrotic spots evenly dispersed on leaf blade",
-                "Distinct yellow chlorotic halos encircling dark brown spots",
+                "Scattered necrotic foliar spots on leaf blade",
             ],
             "insect_directly_visible": False,
             "image_quality": "good",
             "severity": {"percentage": area_pct, "band": severity_band, "scope": "visible_leaf_sample", "method": severity_method},
             "diagnosis_status": "possible",
             "alternative_predictions": [
-                {"slug": "rice-blast", "name": "Rice Blast", "confidence": 0.58},
-                {"slug": "bacterial-leaf-streak", "name": "Bacterial Leaf Streak", "confidence": 0.44},
+                {"slug": "rice-blast", "name": "Rice Blast", "confidence": 0.50},
             ],
         }
