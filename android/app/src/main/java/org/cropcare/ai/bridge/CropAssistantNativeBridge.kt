@@ -121,61 +121,59 @@ class CropAssistantNativeBridge(
     fun injectShim() {
         val shimScript = """
             (function() {
-                if (window.CropAssistantNative) return;
-                window.CropAssistantNative = {
-                    diagnose: function(input) {
-                        return new Promise(function(resolve, reject) {
-                            try {
-                                var resJson = window.CropAssistantAndroid.diagnoseSync(JSON.stringify(input));
-                                resolve(JSON.parse(resJson));
-                            } catch (e) {
-                                reject(e);
-                            }
-                        });
-                    },
-                    ask: function(input) {
-                        return new Promise(function(resolve, reject) {
-                            try {
-                                var ans = window.CropAssistantAndroid.askSync(JSON.stringify(input));
-                                resolve(ans);
-                            } catch (e) {
-                                reject(e);
-                            }
-                        });
-                    },
-                    status: function() {
-                        return new Promise(function(resolve, reject) {
-                            try {
-                                var resJson = window.CropAssistantAndroid.statusSync();
-                                resolve(JSON.parse(resJson));
-                            } catch (e) {
-                                reject(e);
-                            }
-                        });
-                    },
-                    speak: function(text, lang) {
+                window.CropAssistantNative = window.CropAssistantNative || {};
+                window.CropAssistantNative.diagnose = function(input) {
+                    return new Promise(function(resolve, reject) {
                         try {
-                            if (window.CropAssistantAndroid && window.CropAssistantAndroid.speakText) {
-                                return window.CropAssistantAndroid.speakText(text, lang || "en");
-                            }
-                        } catch (e) {}
-                        return false;
-                    },
-                    stopSpeaking: function() {
+                            var resJson = window.CropAssistantAndroid.diagnoseSync(JSON.stringify(input));
+                            resolve(JSON.parse(resJson));
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                };
+                window.CropAssistantNative.ask = function(input) {
+                    return new Promise(function(resolve, reject) {
                         try {
-                            if (window.CropAssistantAndroid && window.CropAssistantAndroid.stopSpeaking) {
-                                window.CropAssistantAndroid.stopSpeaking();
-                            }
-                        } catch (e) {}
-                    },
-                    isSpeaking: function() {
+                            var ans = window.CropAssistantAndroid.askSync(JSON.stringify(input));
+                            resolve(ans);
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                };
+                window.CropAssistantNative.status = function() {
+                    return new Promise(function(resolve, reject) {
                         try {
-                            if (window.CropAssistantAndroid && window.CropAssistantAndroid.isSpeaking) {
-                                return window.CropAssistantAndroid.isSpeaking();
-                            }
-                        } catch (e) {}
-                        return false;
-                    }
+                            var resJson = window.CropAssistantAndroid.statusSync();
+                            resolve(JSON.parse(resJson));
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                };
+                window.CropAssistantNative.speak = function(text, lang) {
+                    try {
+                        if (window.CropAssistantAndroid && window.CropAssistantAndroid.speakText) {
+                            return window.CropAssistantAndroid.speakText(text, lang || "en");
+                        }
+                    } catch (e) {}
+                    return false;
+                };
+                window.CropAssistantNative.stopSpeaking = function() {
+                    try {
+                        if (window.CropAssistantAndroid && window.CropAssistantAndroid.stopSpeaking) {
+                            window.CropAssistantAndroid.stopSpeaking();
+                        }
+                    } catch (e) {}
+                };
+                window.CropAssistantNative.isSpeaking = function() {
+                    try {
+                        if (window.CropAssistantAndroid && window.CropAssistantAndroid.isSpeaking) {
+                            return window.CropAssistantAndroid.isSpeaking();
+                        }
+                    } catch (e) {}
+                    return false;
                 };
             })();
         """.trimIndent()

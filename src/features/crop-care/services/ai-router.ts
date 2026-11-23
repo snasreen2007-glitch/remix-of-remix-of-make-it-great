@@ -170,7 +170,7 @@ export class AIEngineRouter {
         if (groqText && groqText.length > 5) {
           rawReply = groqText;
           usedModel = "KisanAI High-Speed Neural Core (Connected)";
-        } else {
+        } else if (typeof window !== "undefined" && !window.location.origin.includes("androidplatform")) {
           const serverRes = await handleAIChatServer({
             data: {
               model: this.selectedOnlineModelId,
@@ -181,6 +181,9 @@ export class AIEngineRouter {
           });
           rawReply = serverRes.text;
           usedModel = serverRes.model || this.selectedOnlineModelId;
+        } else {
+          targetEngine = "offline";
+          usedEngine = "offline";
         }
       } catch (err) {
         if (this.mode === "online") {

@@ -28,18 +28,26 @@ export function getNativeBridge(): NativeBridge {
     };
   };
 
-  if (win.CropAssistantNative) return win.CropAssistantNative;
-
+  // If running inside Android WebView, always prioritize real Android native bridge
   if (win.CropAssistantAndroid) {
     const android = win.CropAssistantAndroid;
     const bridge: NativeBridge = {
       diagnose: (input) => Promise.resolve(JSON.parse(android.diagnoseSync(JSON.stringify(input)))),
-      ask: (input) => Promise.resolve(android.askSync(JSON.stringify(input))),
+      ask: (input) => {
+        try {
+          const res = android.askSync(JSON.stringify(input));
+          return Promise.resolve(res);
+        } catch (e) {
+          return Promise.reject(e);
+        }
+      },
       status: () => Promise.resolve(JSON.parse(android.statusSync())),
     };
     win.CropAssistantNative = bridge;
     return bridge;
   }
+
+  if (win.CropAssistantNative && win.CropAssistantNative.ask) return win.CropAssistantNative;
 
   // Provide embedded on-device neural bridge for continuous offline capability
   const activeBridge: NativeBridge = {
@@ -51,7 +59,11 @@ export function getNativeBridge(): NativeBridge {
         ...(res.severity ? { severity: res.severity } : {}),
       };
     },
-    // In web preview/browser mode, omit ask so context.tsx queries queryLiveLlamaEndpoint directly
+    async ask(input) {
+      const { generateLlamaChatResponse } = await import("./llama");
+      const res = generateLlamaChatResponse(input.question, input.lang as any);
+      return res.text;
+    },
     async status() {
       return [
         {
@@ -102,6 +114,7 @@ export function isNativeApp(): boolean {
   const win = window as any;
   return Boolean(
     win.CropAssistantAndroid ||
+    (win.location && win.location.origin && win.location.origin.includes("androidplatform")) ||
     (typeof navigator !== "undefined" && navigator.userAgent && navigator.userAgent.includes("KisanAI"))
   );
 }

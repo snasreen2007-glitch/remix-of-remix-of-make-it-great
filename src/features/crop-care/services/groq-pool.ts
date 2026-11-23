@@ -134,8 +134,9 @@ export async function queryGroqChat(
     "allam-2-7b",
   ];
 
-  // Try across keys in the pool with automatic failover
-  for (let attempt = 0; attempt < XOR_POOL.length; attempt++) {
+  // Try across keys in the pool with automatic failover (fast 2-attempt budget)
+  const maxAttempts = Math.min(2, XOR_POOL.length);
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const key = getNextGroqKey();
     const model = candidateModels[attempt % candidateModels.length] || "qwen/qwen3.8-27b";
 
@@ -152,7 +153,7 @@ export async function queryGroqChat(
           max_tokens: options.maxTokens || 1024,
           temperature: options.temperature ?? 0.4,
         }),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(3500),
       });
 
       if (res.status === 429) {

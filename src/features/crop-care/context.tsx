@@ -4,7 +4,7 @@ import type { CropKey } from "./knowledge";
 import { registerCropCareAppShell } from "./pwa";
 import { type AssistantContext } from "./services/advisory";
 import { generateLlamaChatResponse, queryLiveLlamaEndpoint } from "./services/llama";
-import { getNativeBridge } from "./services/native";
+import { getNativeBridge, isNativeApp } from "./services/native";
 import { chatStore, clearUserData, defaultSettings, eventService, historyService, newId, recentService, reminderService, savedService, settingsService } from "./services/store";
 import type { ChatMessage, LocalEvent, Reminder, SavedItem, SavedKind, Scan, Settings } from "./services/types";
 
@@ -188,6 +188,7 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
     const add = (m: ChatMessage) => setMessages((c) => { const n = [...c, m]; chatStore.save(n); return n; });
     add({ id: newId(), role: "farmer", text: question, timestamp: Date.now() });
     setTyping(true);
+
     const llamaRes = generateLlamaChatResponse(
       question,
       settings.lang,
@@ -199,7 +200,17 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
       } : undefined,
       messages
     );
+
+    let finished = false;
+    let failsafeTimer: ReturnType<typeof setTimeout> | null = null;
+
     const finish = (txt: string) => {
+      if (finished) return;
+      finished = true;
+      if (failsafeTimer) {
+        clearTimeout(failsafeTimer);
+        failsafeTimer = null;
+      }
       setTyping(false);
       add({
         id: newId(),
@@ -213,6 +224,39 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
     };
 
     if (llamaRes.safetyTriggered) {
+      finish(llamaRes.text);
+      return;
+    }
+
+    // Failsafe timer: guarantees the UI never gets stuck with animated dots
+    failsafeTimer = setTimeout(() => {
+      finish(llamaRes.text);
+    }, 4500);
+
+    // 1. Android Native APK or Local Mode: Execute instant on-device Llama engine
+    if (isNativeApp() || settings.llmProvider === "local" || settings.llmProvider === "ollama") {
+      const bridge = getNativeBridge();
+      if (bridge?.ask) {
+        bridge.ask({ question, context: llamaRes.text, lang: settings.lang })
+          .then((ans) => {
+            if (ans && ans.length > 5) {
+              finish(ans);
+            } else {
+              finish(llamaRes.text);
+            }
+          })
+          .catch(() => {
+            finish(llamaRes.text);
+          });
+        return;
+      }
+      finish(llamaRes.text);
+      return;
+    }
+
+    // 2. Browser offline mode: immediate verified response
+    const isDeviceOnline = typeof navigator !== "undefined" ? navigator.onLine : false;
+    if (!isDeviceOnline) {
       finish(llamaRes.text);
       return;
     }
@@ -236,28 +280,9 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
       isUncertainOrOOD: (ctx.confidence ?? 0.90) < 0.40,
     } : null;
 
-    // Use AI Engine Router for Hybrid Online/Offline execution
+    // 3. Online Web Browser execution via ai-router with guaranteed fast fallback
     import("./services/ai-router").then(async ({ aiRouter }) => {
-      const isDeviceOnline = typeof navigator !== "undefined" ? navigator.onLine : false;
-
-      // When strictly offline in Android APK, prioritize native bridge if available
-      if (!isDeviceOnline) {
-        const bridge = getNativeBridge();
-        if (bridge?.ask) {
-          try {
-            const ans = await bridge.ask({ question, context: llamaRes.text, lang: settings.lang });
-            if (ans && ans.length > 5) {
-              finish(ans);
-              return;
-            }
-          } catch {}
-        }
-      }
-
-      // Sync engine mode from user settings
-      if (settings.llmProvider === "local" || settings.llmProvider === "ollama") {
-        aiRouter.setMode("offline");
-      } else if (settings.llmProvider === "openai" || settings.llmProvider === "gemini") {
+      if (settings.llmProvider === "openai" || settings.llmProvider === "gemini") {
         aiRouter.setMode("online");
         if (settings.customModel) aiRouter.setOnlineModel(settings.customModel);
       } else {
@@ -276,31 +301,10 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
         lang: settings.lang,
       }).then((result) => {
         finish(result.text);
-      }).catch(async () => {
-        // Fallback to native bridge if present, else local on-device RAG
-        const bridge = getNativeBridge();
-        if (bridge?.ask) {
-          try {
-            const ans = await bridge.ask({ question, context: llamaRes.text, lang: settings.lang });
-            if (ans && ans.length > 5) {
-              finish(ans);
-              return;
-            }
-          } catch {}
-        }
+      }).catch(() => {
         finish(llamaRes.text);
       });
-    }).catch(async () => {
-      const bridge = getNativeBridge();
-      if (bridge?.ask) {
-        try {
-          const ans = await bridge.ask({ question, context: llamaRes.text, lang: settings.lang });
-          if (ans && ans.length > 5) {
-            finish(ans);
-            return;
-          }
-        } catch {}
-      }
+    }).catch(() => {
       finish(llamaRes.text);
     });
   }, [settings, online, messages]);
