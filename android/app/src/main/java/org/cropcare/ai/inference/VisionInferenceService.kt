@@ -11,6 +11,21 @@ import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.exp
 import kotlin.math.ln
+import org.json.JSONObject
+
+data class HgbNode(
+    val feat: Int = 0,
+    val thresh: Double = 0.0,
+    val left: Int = 0,
+    val right: Int = 0,
+    val valNode: Double = 0.0,
+    val leaf: Boolean = false
+)
+
+data class HgbModel(
+    val classes: List<String>,
+    val trees: List<List<List<HgbNode>>>
+)
 
 data class DiagnosisInferenceResult(
     val slug: String?,
@@ -33,6 +48,8 @@ class VisionInferenceService(private val context: Context) {
     private var hierarchicalModule: Module? = null
     private var riceModule: Module? = null
     private var chilliModule: Module? = null
+    private var chilliDiseaseHgbModel: HgbModel? = null
+    private var chilliPestHgbModel: HgbModel? = null
 
     // 10-Class Paddy Doctor Tamil Nadu production taxonomy
     private val riceClasses = listOf(
@@ -68,6 +85,54 @@ class VisionInferenceService(private val context: Context) {
     private val chilliDiseaseClasses = chilliClasses
     private val chilliPestClasses = listOf("thrips", "mites", "whitefly", "aphids")
 
+    private fun loadHgbModelFromAsset(assetName: String): HgbModel? {
+        return try {
+            val openedStream = listOf(assetName, "models/$assetName").mapNotNull {
+                try { context.assets.open(it) } catch (_: Exception) { null }
+            }.firstOrNull() ?: return null
+
+            val jsonStr = openedStream.bufferedReader().use { it.readText() }
+            val obj = JSONObject(jsonStr)
+            val classesJson = obj.getJSONArray("classes")
+            val classes = mutableListOf<String>()
+            for (i in 0 until classesJson.length()) {
+                classes.add(classesJson.getString(i))
+            }
+            val treesJson = obj.getJSONArray("trees")
+            val trees = mutableListOf<List<List<HgbNode>>>()
+            for (i in 0 until treesJson.length()) {
+                val iterJson = treesJson.getJSONArray(i)
+                val classTrees = mutableListOf<List<HgbNode>>()
+                for (k in 0 until iterJson.length()) {
+                    val nodesJson = iterJson.getJSONArray(k)
+                    val nodes = mutableListOf<HgbNode>()
+                    for (n in 0 until nodesJson.length()) {
+                        val nodeObj = nodesJson.getJSONObject(n)
+                        val isLeaf = nodeObj.optBoolean("leaf", false)
+                        if (isLeaf) {
+                            nodes.add(HgbNode(valNode = nodeObj.optDouble("val", 0.0), leaf = true))
+                        } else {
+                            nodes.add(
+                                HgbNode(
+                                    feat = nodeObj.optInt("feat", 0),
+                                    thresh = nodeObj.optDouble("thresh", 0.0),
+                                    left = nodeObj.optInt("left", 0),
+                                    right = nodeObj.optInt("right", 0),
+                                    leaf = false
+                                )
+                            )
+                        }
+                    }
+                    classTrees.add(nodes)
+                }
+                trees.add(classTrees)
+            }
+            HgbModel(classes, trees)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     fun initialize() {
         // Attempt loading Hierarchical Champion Model (EfficientNetV2-S)
         try {
@@ -91,11 +156,19 @@ class VisionInferenceService(private val context: Context) {
                 chilliModule = LiteModuleLoader.load(chilliPath)
             }
         } catch (_: Exception) {}
+
+        try {
+            chilliDiseaseHgbModel = loadHgbModelFromAsset("chilli_hgb_model.json")
+        } catch (_: Exception) {}
+
+        try {
+            chilliPestHgbModel = loadHgbModelFromAsset("chilli_pest_hgb.json")
+        } catch (_: Exception) {}
     }
 
-    fun isModelReady(): Boolean = hierarchicalModule != null || riceModule != null || chilliModule != null
+    fun isModelReady(): Boolean = hierarchicalModule != null || riceModule != null || chilliModule != null || chilliDiseaseHgbModel != null
     fun isRiceLoaded(): Boolean = riceModule != null || hierarchicalModule != null
-    fun isChilliLoaded(): Boolean = chilliModule != null || hierarchicalModule != null
+    fun isChilliLoaded(): Boolean = chilliDiseaseHgbModel != null || chilliModule != null || hierarchicalModule != null
 
     private fun isBotanicalFoliage(bitmap: Bitmap): Pair<Boolean, String> {
         val scaled = Bitmap.createScaledBitmap(bitmap, 64, 64, false)
@@ -204,7 +277,7 @@ class VisionInferenceService(private val context: Context) {
      * Level 3: Problem Category (Disease, Pest, Healthy)
      * Level 4: Fine-Grained Specialist Diagnosis
      */
-    fun classifyImage(crop: String, bitmap: Bitmap): DiagnosisInferenceResult {
+    fun classifyImage(crop: String, bitmap: Bitmap, mode: String = "disease"): DiagnosisInferenceResult {
         val (isValid, reason) = isBotanicalFoliage(bitmap)
         if (!isValid) {
             return DiagnosisInferenceResult(
@@ -255,9 +328,57 @@ class VisionInferenceService(private val context: Context) {
             }
         }
 
-        // Dedicated 11-Class Chilli MobileNetV3 Model
-        if (crop == "chilli" && chilliModule != null) {
-            return runLegacyInference("chilli", chilliModule!!, bitmap)
+        // Dedicated Chilli Diagnostic Pipeline (Pest and Disease specialized HGB engines)
+        if (crop == "chilli") {
+            val feat = extractChilli14Features(bitmap)
+            if (mode == "pest" && chilliPestHgbModel != null) {
+                val model = chilliPestHgbModel!!
+                val (slug, conf, candidates) = evaluateHgb(model, feat)
+                val candidateList = candidates.filter { it.first != "none" }
+
+                if (slug != "none" && conf >= 0.20) {
+                    return DiagnosisInferenceResult(
+                        slug = slug,
+                        confidence = Math.min(0.92, Math.round(conf * 100.0) / 100.0),
+                        level = 4,
+                        status = "IDENTIFIED",
+                        category = "pest",
+                        explanation = "Foliar damage patterns characteristic of $slug infestation.",
+                        candidates = candidateList
+                    )
+                } else if (slug == "none" && conf >= 0.40) {
+                    return DiagnosisInferenceResult(
+                        slug = "chilli-healthy",
+                        confidence = Math.min(0.92, Math.round(conf * 100.0) / 100.0),
+                        level = 4,
+                        status = "CONFIRMED_HEALTHY",
+                        category = "healthy",
+                        explanation = "No foliar sucking pests detected on chilli specimen.",
+                        candidates = candidateList
+                    )
+                }
+            } else if (chilliDiseaseHgbModel != null) {
+                val model = chilliDiseaseHgbModel!!
+                val (slug, conf, candidates) = evaluateHgb(model, feat)
+                val candidateList = candidates.filter { it.first != "unknown" }
+
+                if (slug != "unknown" && conf >= 0.20) {
+                    val isHealthy = slug == "chilli-healthy"
+                    return DiagnosisInferenceResult(
+                        slug = slug,
+                        confidence = Math.min(0.92, Math.round(conf * 100.0) / 100.0),
+                        level = 4,
+                        status = if (isHealthy) "CONFIRMED_HEALTHY" else "IDENTIFIED",
+                        category = if (isHealthy) "healthy" else "disease",
+                        explanation = if (isHealthy) "Specimen shows robust, healthy crop foliage with no foliar lesions." else "Foliar symptom markers characteristic of $slug.",
+                        candidates = candidateList
+                    )
+                }
+            }
+
+            if (chilliModule != null) {
+                return runLegacyInference("chilli", chilliModule!!, bitmap)
+            }
         }
 
         if (hierarchicalModule != null) {
@@ -550,5 +671,142 @@ class VisionInferenceService(private val context: Context) {
             }
         }
         return file.absolutePath
+    }
+
+    private fun extractChilli14Features(bitmap: Bitmap): DoubleArray {
+        val w = 256
+        val h = 256
+        val scaled = Bitmap.createScaledBitmap(bitmap, w, h, true)
+        val pixels = IntArray(w * h)
+        scaled.getPixels(pixels, 0, w, 0, 0, w, h)
+        val totalPixels = (w * h).toDouble()
+
+        var sumR = 0.0
+        var sumG = 0.0
+        var sumB = 0.0
+        var sumDiffRG = 0.0
+
+        var foliarCount = 0
+        var yellowCount = 0
+        var brownCount = 0
+        var ashCount = 0
+        var whiteCount = 0
+        var yellowMarginCount = 0
+        var brownMarginCount = 0
+
+        for (y in 0 until h) {
+            val isMarginY = (y < 51 || y >= (h - 51))
+            val rowOffset = y * w
+            for (x in 0 until w) {
+                val isMargin = isMarginY || (x < 51 || x >= (w - 51))
+                val p = pixels[rowOffset + x]
+                val r = ((p shr 16) and 0xFF) / 255.0
+                val g = ((p shr 8) and 0xFF) / 255.0
+                val b = (p and 0xFF) / 255.0
+
+                sumR += r
+                sumG += g
+                sumB += b
+                sumDiffRG += Math.abs(r - g)
+
+                val isFoliar = (g > r * 0.95) && (g > b * 0.95) && (g > 0.12)
+                val isYellow = (r > 0.35) && (g > 0.32) && (b < 0.30) && (r + g > b * 1.8)
+                val isBrown = (r > 0.22) && (g < r * 0.95) && (b < 0.25) && (r > b * 1.2)
+                val isAsh = (Math.abs(r - g) < 0.08) && (Math.abs(g - b) < 0.08) && (r > 0.30) && (r < 0.75)
+                val isWhite = (r > 0.60) && (g > 0.60) && (b > 0.55) && (isFoliar || isYellow)
+
+                if (isFoliar) foliarCount++
+                if (isYellow) {
+                    yellowCount++
+                    if (isMargin) yellowMarginCount++
+                }
+                if (isBrown) {
+                    brownCount++
+                    if (isMargin) brownMarginCount++
+                }
+                if (isAsh) ashCount++
+                if (isWhite) whiteCount++
+            }
+        }
+
+        val meanR = sumR / totalPixels
+        val meanG = sumG / totalPixels
+        val meanB = sumB / totalPixels
+        val meanDiffRG = sumDiffRG / totalPixels
+
+        var varR = 0.0
+        var varG = 0.0
+        var varB = 0.0
+        for (p in pixels) {
+            val r = ((p shr 16) and 0xFF) / 255.0
+            val g = ((p shr 8) and 0xFF) / 255.0
+            val b = (p and 0xFF) / 255.0
+            varR += (r - meanR) * (r - meanR)
+            varG += (g - meanG) * (g - meanG)
+            varB += (b - meanB) * (b - meanB)
+        }
+        val stdR = Math.sqrt(varR / totalPixels)
+        val stdG = Math.sqrt(varG / totalPixels)
+        val stdB = Math.sqrt(varB / totalPixels)
+
+        return doubleArrayOf(
+            foliarCount / totalPixels,
+            yellowCount / totalPixels,
+            brownCount / totalPixels,
+            ashCount / totalPixels,
+            whiteCount / totalPixels,
+            yellowMarginCount / totalPixels,
+            brownMarginCount / totalPixels,
+            meanR, meanG, meanB,
+            stdR, stdG, stdB,
+            meanDiffRG
+        )
+    }
+
+    private fun evaluateHgb(model: HgbModel, feat: DoubleArray): Triple<String, Double, List<Pair<String, Double>>> {
+        val kClasses = model.classes.size
+        val rawScores = DoubleArray(kClasses) { 0.0 }
+
+        for (iterTrees in model.trees) {
+            for (k in 0 until kClasses) {
+                if (k >= iterTrees.size) continue
+                val treeNodes = iterTrees[k]
+                var curr = 0
+                while (curr < treeNodes.size && !treeNodes[curr].leaf) {
+                    val node = treeNodes[curr]
+                    val featVal = if (node.feat < feat.size) feat[node.feat] else 0.0
+                    if (featVal <= node.thresh) {
+                        curr = node.left
+                    } else {
+                        curr = node.right
+                    }
+                }
+                if (curr < treeNodes.size) {
+                    rawScores[k] += treeNodes[curr].valNode
+                }
+            }
+        }
+
+        var maxS = rawScores[0]
+        for (i in 1 until kClasses) {
+            if (rawScores[i] > maxS) maxS = rawScores[i]
+        }
+
+        var sumExp = 0.0
+        val expS = DoubleArray(kClasses)
+        for (i in 0 until kClasses) {
+            expS[i] = Math.exp(rawScores[i] - maxS)
+            sumExp += expS[i]
+        }
+
+        val probs = DoubleArray(kClasses) { i -> expS[i] / Math.max(1e-6, sumExp) }
+
+        val candidates = model.classes.mapIndexed { idx, cSlug ->
+            val normSlug = if (cSlug == "whiteflies") "whitefly" else cSlug
+            Pair(normSlug, Math.round(probs[idx] * 100.0) / 100.0)
+        }.sortedByDescending { it.second }
+
+        val bestCandidate = candidates.firstOrNull() ?: Pair("unknown", 0.0)
+        return Triple(bestCandidate.first, bestCandidate.second, candidates)
     }
 }

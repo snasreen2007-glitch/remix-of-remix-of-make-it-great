@@ -674,11 +674,11 @@ export async function analyzeImageWithVision(
           const b = b8 / 255.0;
 
           // 14-Feature ML Feature Definitions (Identical to training pipeline)
-          const isFoliar = (g > r * 1.05) && (g > b * 1.05) && (g > 0.15);
-          const isYellow = (r > 0.38) && (g > 0.35) && (b < 0.28) && (r > b * 1.3);
-          const isBrown = (r > 0.24) && (g < r * 0.92) && (b < 0.24) && (r > b * 1.3);
-          const isAsh = (Math.abs(r - g) < 0.07) && (Math.abs(g - b) < 0.07) && (r > 0.35) && (r < 0.70);
-          const isWhite = (r > 0.65) && (g > 0.65) && (b > 0.60) && (isFoliar || isYellow);
+          const isFoliar = (g > r * 0.95) && (g > b * 0.95) && (g > 0.12);
+          const isYellow = (r > 0.35) && (g > 0.32) && (b < 0.30) && (r + g > b * 1.8);
+          const isBrown = (r > 0.22) && (g < r * 0.95) && (b < 0.25) && (r > b * 1.2);
+          const isAsh = (Math.abs(r - g) < 0.08) && (Math.abs(g - b) < 0.08) && (r > 0.30) && (r < 0.75);
+          const isWhite = (r > 0.60) && (g > 0.60) && (b > 0.55) && (isFoliar || isYellow);
 
           if (isFoliar) foliarCount++;
           if (isYellow) {
@@ -1223,25 +1223,44 @@ export async function analyzeImageWithVision(
       else {
         // Query In-Browser trained HistGradientBoosting model for chilli
         const hgbModel = await loadHgbModel("chilli");
-        const hgbRes = hgbModel ? evaluateHgb(hgbModel, featVector) : null;
+        const rawHgbRes = hgbModel ? evaluateHgb(hgbModel, featVector) : null;
+        const hgbRes = rawHgbRes ? {
+          ...rawHgbRes,
+          candidates: rawHgbRes.candidates.filter((c: any) => c.slug !== "unknown"),
+        } : null;
 
+        let pestRes: { slug: string; confidence: number; candidates: { slug: string; confidence: number }[] } | null = null;
         try {
           const pestModel = await loadChilliPestModel();
           if (pestModel) {
-            const pestRes = evaluateHgb(pestModel, featVector);
-            if (pestRes && pestRes.slug !== "none" && pestRes.confidence >= 0.30) {
-              const pestLabels: Record<string, string> = {
-                thrips: "Upward boat-shaped leaf cupping with silvery/bronze feeding scars",
-                mites: "Downward leaf curling, inverted boat puckering and leathery texture",
-                whiteflies: "Chlorotic speckling, honeydew secretion with leaf curl vector risk",
-                aphids: "Leaf crinkling and colony clusters on tender growing tips",
+            const rawPestRes = evaluateHgb(pestModel, featVector);
+            if (rawPestRes) {
+              const normSlug = rawPestRes.slug === "whiteflies" ? "whitefly" : rawPestRes.slug;
+              const normCandidates = rawPestRes.candidates.map((c: any) => ({
+                slug: c.slug === "whiteflies" ? "whitefly" : c.slug,
+                confidence: c.confidence,
+              })).filter((c: any) => c.slug !== "none");
+              pestRes = {
+                slug: normSlug,
+                confidence: rawPestRes.confidence,
+                candidates: normCandidates,
               };
-              pestAnalysis = {
-                detectedPest: pestRes.slug,
-                pestConfidence: pestRes.confidence,
-                visibleDamage: pestLabels[pestRes.slug] || "Visible foliar feeding marks",
-                countRange: pestRes.confidence > 0.70 ? "Established infestation" : "Early signs / trace presence",
-              };
+
+              if (pestRes.slug !== "none" && pestRes.confidence >= 0.25) {
+                const pestLabels: Record<string, string> = {
+                  thrips: "Upward boat-shaped leaf cupping with silvery/bronze feeding scars",
+                  mites: "Downward leaf curling, inverted boat puckering and leathery texture",
+                  whitefly: "Chlorotic speckling, honeydew secretion with leaf curl vector risk",
+                  whiteflies: "Chlorotic speckling, honeydew secretion with leaf curl vector risk",
+                  aphids: "Leaf crinkling and colony clusters on tender growing tips",
+                };
+                pestAnalysis = {
+                  detectedPest: pestRes.slug,
+                  pestConfidence: pestRes.confidence,
+                  visibleDamage: pestLabels[pestRes.slug] || "Visible foliar feeding marks",
+                  countRange: pestRes.confidence > 0.70 ? "Established infestation" : "Early signs / trace presence",
+                };
+              }
             }
           }
         } catch {}
@@ -1262,45 +1281,30 @@ export async function analyzeImageWithVision(
         } catch {}
 
         // Priority 1: Local server with trained model (if local Python backend is running)
-        if (deepModelResult && deepModelResult.slug && deepModelResult.slug !== "unknown" && deepModelResult.confidence >= 0.35) {
+        if (deepModelResult && deepModelResult.slug && deepModelResult.slug !== "unknown" && matchesMode(deepModelResult.slug) && deepModelResult.confidence >= 0.35) {
           detectedSlug = deepModelResult.slug;
           confidence = Math.min(0.98, deepModelResult.confidence);
           patternName = detectedSlug.replace("-", "_");
           candidates = deepModelResult.candidates;
         }
-        // Priority 2: Client-side In-Browser Real-Field Gradient Boosted Trees (100% offline browser execution)
-        else if (hgbRes && hgbRes.confidence >= 0.42 && hgbRes.slug !== "unknown") {
-          const modeCandidate = hgbRes.candidates.find((c: any) => matchesMode(c.slug));
-          if (modeCandidate && modeCandidate.confidence >= 0.40) {
-            detectedSlug = modeCandidate.slug;
-            confidence = modeCandidate.confidence;
-            patternName = detectedSlug.replace("-", "_");
-            candidates = hgbRes.candidates;
-          } else if (hgbRes.confidence >= 0.45) {
-            detectedSlug = hgbRes.slug;
-            confidence = hgbRes.confidence;
-            patternName = detectedSlug.replace("-", "_");
-            candidates = hgbRes.candidates;
-          } else {
-            return resolve({
-              source: "model",
-              outcome: "unknown",
-              confidence: hgbRes.confidence,
-              candidates: hgbRes.candidates,
-              diagnostics: {
-                plantPixels,
-                lesionPixels: totalLesionPixels,
-                affectedPercent,
-                isCropValid: false,
-                pattern: "inconclusive_low_confidence",
-              },
-            });
-          }
+        // Priority 2: Pest mode - Specialized HistGradientBoosting Pest Model
+        else if (mode === "pest" && pestRes && pestRes.slug !== "none" && pestRes.confidence >= 0.25) {
+          detectedSlug = pestRes.slug;
+          confidence = Math.min(0.96, pestRes.confidence);
+          patternName = detectedSlug.replace("-", "_");
+          candidates = pestRes.candidates;
         }
-        // Priority 3: In-Browser ONNX WebAssembly Deep Neural Network & Foliar Pathology
+        // Priority 3: Disease mode (or general) - Specialized HistGradientBoosting Disease Model
+        else if (mode === "disease" && hgbRes && hgbRes.confidence >= 0.25 && hgbRes.slug !== "unknown") {
+          detectedSlug = hgbRes.slug;
+          confidence = Math.min(0.96, hgbRes.confidence);
+          patternName = detectedSlug.replace("-", "_");
+          candidates = hgbRes.candidates;
+        }
+        // Priority 4: In-Browser ONNX WebAssembly Deep Neural Network & Foliar Pathology
         else {
           const onnxRes = await runOnnxInference("chilli", canvas);
-          if (onnxRes && onnxRes.confidence >= 0.35 && onnxRes.slug !== "unknown") {
+          if (onnxRes && onnxRes.confidence >= 0.35 && onnxRes.slug !== "unknown" && matchesMode(onnxRes.slug)) {
             const modeCandidate = onnxRes.candidates.find((c: any) => matchesMode(c.slug));
             detectedSlug = modeCandidate ? modeCandidate.slug : onnxRes.slug;
             confidence = modeCandidate ? Math.min(0.95, modeCandidate.confidence) : Math.min(0.95, onnxRes.confidence);
@@ -1308,10 +1312,10 @@ export async function analyzeImageWithVision(
             candidates = onnxRes.candidates;
           } else if (mode === "disease") {
             const scores: Record<string, number> = {
-              "powdery-mildew": whitePowderyPixels * 3.5,
-              "cercospora-leaf-spot": brownSpotPixels * 2.2 + blastAshCorePixels * 2.0,
-              "anthracnose": brownSpotPixels * 2.8 + marginLesionCount * 1.4,
-              "leaf-curl": chloroticStreakPixels * 1.8 + (totalPixels - healthyGreenPixels) * 0.1,
+              "powdery-mildew": whitePowderyPixels * 3.5 + ashCorePixels * 1.5,
+              "cercospora-leaf-spot": brownSpotPixels * 2.5 + blastAshCorePixels * 2.2,
+              "anthracnose": brownSpotPixels * 2.8 + marginLesionCount * 1.8,
+              "leaf-curl": chloroticStreakPixels * 2.2 + chloroticCount * 0.6,
               "bacterial-leaf-spot": brownSpotPixels * 1.8 + chloroticStreakPixels * 1.4,
             };
 
@@ -1330,10 +1334,10 @@ export async function analyzeImageWithVision(
           } else {
             // Chilli Pest Signs
             const pestScores: Record<string, number> = {
-              "thrips": chloroticStreakPixels * 2.2 + marginLesionCount * 1.2,
-              "whitefly": whitePowderyPixels * 2.8 + chloroticCount * 0.5,
-              "mites": brownSpotPixels * 1.6 + centerLesionCount * 1.4,
-              "aphids": chloroticStreakPixels * 1.4 + (totalFoliage - healthyGreenPixels) * 0.3,
+              "thrips": chloroticStreakPixels * 2.2 + marginLesionCount * 1.5,
+              "whitefly": whitePowderyPixels * 2.8 + chloroticCount * 0.8,
+              "mites": brownSpotPixels * 2.0 + centerLesionCount * 1.5,
+              "aphids": chloroticStreakPixels * 1.5 + (totalFoliage - healthyGreenPixels) * 0.3,
             };
 
             const sorted = Object.entries(pestScores).sort((a, b) => b[1] - a[1]);

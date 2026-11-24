@@ -186,7 +186,7 @@ class CropAssistantNativeBridge(
         return try {
             val input = JSONObject(payloadJson)
             val crop = input.getString("crop")
-            val mode = input.getString("mode")
+            val mode = input.optString("mode", "disease")
             val imageDataUrl = input.getString("imageDataUrl")
 
             val bitmap = decodeBase64Image(imageDataUrl)
@@ -196,7 +196,7 @@ class CropAssistantNativeBridge(
                     put("error", "Failed to decode image")
                 }.toString()
 
-            val diagResult = visionService.classifyImage(crop, bitmap)
+            val diagResult = visionService.classifyImage(crop, bitmap, mode)
             val slug = diagResult.slug
             val confidence = diagResult.confidence
 
