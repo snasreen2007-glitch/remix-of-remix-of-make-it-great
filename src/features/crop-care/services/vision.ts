@@ -1069,38 +1069,36 @@ export async function analyzeImageWithVision(
           }
 
           const isRiceBlastSpindle =
-            (blastCoreRatio >= 0.18 && whiteCorePixels >= 500 && yellowHaloPixels < whiteCorePixels * 3.5) ||
-            (blastCoreRatio >= 0.25 && whiteCorePixels >= 1000);
+            (blastCoreRatio >= 0.22 && whiteCorePixels >= 800 && yellowHaloPixels < whiteCorePixels * 3.0) ||
+            (blastCoreRatio >= 0.30 && whiteCorePixels >= 1400);
 
           const isRiceBrownSpotLesions =
-            ((brownMarginPixels >= 1500 && blastCoreRatio < 0.15) || (brownMarginPixels >= 3500 && blastCoreRatio < 0.18)) ||
-            (yellowHaloPixels >= 2500 && blastCoreRatio < 0.12 && brownMarginPixels >= 800);
+            (brownMarginPixels >= 2500 && blastCoreRatio < 0.15) ||
+            (yellowHaloPixels >= 3000 && blastCoreRatio < 0.12 && brownMarginPixels >= 1000);
 
           // Priority 1: Query Local Deep Learning Server if available
-          if (deepModelResult && deepModelResult.slug && deepModelResult.slug !== "unknown" && deepModelResult.confidence >= 0.35) {
+          if (deepModelResult && deepModelResult.slug && deepModelResult.slug !== "unknown" && deepModelResult.confidence >= 0.25) {
             detectedSlug = deepModelResult.slug;
-            confidence = Math.min(0.98, deepModelResult.confidence);
+            confidence = Math.round(deepModelResult.confidence * 100) / 100;
             patternName = detectedSlug.replace("-", "_");
             candidates = deepModelResult.candidates || [{ slug: detectedSlug, confidence }];
           }
           // Priority 2: In-Browser ONNX WebAssembly Deep Neural Network (covers all 10 Paddy Doctor classes offline)
           else {
             const onnxRes = await runOnnxInference("rice", canvas);
-            if (onnxRes && onnxRes.confidence >= 0.20 && onnxRes.slug !== "unknown") {
+            if (onnxRes && onnxRes.confidence >= 0.15 && onnxRes.slug !== "unknown") {
               const modeCandidate = onnxRes.candidates.find((c: any) => matchesMode(c.slug));
               detectedSlug = modeCandidate ? modeCandidate.slug : onnxRes.slug;
-              confidence = modeCandidate ? Math.min(0.98, modeCandidate.confidence) : Math.min(0.98, onnxRes.confidence);
+              confidence = modeCandidate ? modeCandidate.confidence : onnxRes.confidence;
               patternName = detectedSlug.replace("-", "_");
               candidates = onnxRes.candidates;
 
-              // Refine Blast vs Brown Spot if the neural net predicted blast, brown-spot or downy-mildew
+              // Calibrate specifically between Blast and Brown Spot based on physical lesion morphology (preserving true model confidence)
               if (detectedSlug === "rice-blast" && isRiceBrownSpotLesions && !isRiceBlastSpindle) {
                 detectedSlug = "brown-spot";
-                confidence = Math.max(confidence, 0.94);
                 patternName = "brown_spot";
-              } else if (detectedSlug === "downy-mildew" && isRiceBlastSpindle && brownMarginPixels >= 500) {
+              } else if (detectedSlug === "downy-mildew" && isRiceBlastSpindle && brownMarginPixels >= 600) {
                 detectedSlug = "rice-blast";
-                confidence = Math.max(confidence, 0.94);
                 patternName = "rice_blast";
               }
             }
@@ -1108,11 +1106,11 @@ export async function analyzeImageWithVision(
             else {
               const riceHgbModel = await loadHgbModel("rice");
               const riceHgbRes = riceHgbModel ? evaluateHgb(riceHgbModel, featVector) : null;
-              if (riceHgbRes && riceHgbRes.confidence >= 0.25) {
+              if (riceHgbRes && riceHgbRes.confidence >= 0.20) {
                 const sortedBlended = riceHgbRes.candidates.filter(c => matchesMode(c.slug));
                 if (sortedBlended.length > 0) {
                   detectedSlug = sortedBlended[0]!.slug;
-                  confidence = Math.min(0.95, Math.max(0.78, sortedBlended[0]!.confidence));
+                  confidence = sortedBlended[0]!.confidence;
                   candidates = sortedBlended.slice(0, 4);
                   patternName = detectedSlug.replace("-", "_");
                 }

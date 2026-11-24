@@ -178,15 +178,13 @@ class VisionInferenceService(private val context: Context) {
         val ratio = whiteCore.toFloat() / Math.max(1, brownMargin)
 
         // Case 1: Rice Blast (Spindle lesions with grey/white ash center)
-        if ((ratio >= 0.18f && whiteCore >= 500 && yellowHalo < whiteCore * 3.5f) || (ratio >= 0.25f && whiteCore >= 1000)) {
-            val conf = Math.min(0.97, Math.max(0.90, 0.86 + whiteCore / 20000.0))
-            return Triple("rice-blast", conf, "Spindle-shaped foliar lesions with greyish-white ash core and necrotic margins")
+        if ((ratio >= 0.22f && whiteCore >= 800 && yellowHalo < whiteCore * 3.0f) || (ratio >= 0.30f && whiteCore >= 1400)) {
+            return Triple("rice-blast", 0.0, "Spindle-shaped foliar lesions with greyish-white ash core and necrotic margins")
         }
 
         // Case 2: Brown Spot (Circular dark spots with prominent yellow halos, minimal ash core)
-        if (((brownMargin >= 1500 && ratio < 0.15f) || (brownMargin >= 3500 && ratio < 0.18f)) || (yellowHalo >= 2500 && ratio < 0.12f && brownMargin >= 800)) {
-            val conf = Math.min(0.97, Math.max(0.90, 0.86 + brownMargin / 50000.0))
-            return Triple("brown-spot", conf, "Circular to oval dark brown necrotic lesions surrounded by chlorotic yellow halos")
+        if ((brownMargin >= 2500 && ratio < 0.15f) || (yellowHalo >= 3000 && ratio < 0.12f && brownMargin >= 1000)) {
+            return Triple("brown-spot", 0.0, "Circular to oval dark brown necrotic lesions surrounded by chlorotic yellow halos")
         }
 
         return Triple(null, 0.0, null)
@@ -217,19 +215,18 @@ class VisionInferenceService(private val context: Context) {
             val module = riceModule
             if (module != null) {
                 val res = runLegacyInference("rice", module, bitmap)
-                val (pathoSlug, pathoConf, pathoExplain) = analyzeRicePathology(bitmap)
+                val (pathoSlug, _, pathoExplain) = analyzeRicePathology(bitmap)
 
                 // Calibrate specifically between Blast and Brown Spot when visual pathology detects strong distinguishing features
+                // Maintains the authentic model probability without artificial inflation
                 if (res.slug == "rice-blast" && pathoSlug == "brown-spot") {
                     return res.copy(
                         slug = "brown-spot",
-                        confidence = Math.max(res.confidence, pathoConf),
                         explanation = pathoExplain
                     )
                 } else if (res.slug == "downy-mildew" && pathoSlug == "rice-blast") {
                     return res.copy(
                         slug = "rice-blast",
-                        confidence = Math.max(res.confidence, pathoConf),
                         explanation = pathoExplain
                     )
                 }

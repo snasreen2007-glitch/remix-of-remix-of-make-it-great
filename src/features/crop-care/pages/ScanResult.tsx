@@ -246,11 +246,13 @@ export function ScanResultPage() {
           ? { scale, score: 2, max: 4, band: "moderate" }
           : { scale, score: 18, max: 100, band: "moderate", areaPercent: 18 });
 
+    const candConfidence = scan.candidates?.find(c => c.slug === slug)?.confidence ?? scan.confidence ?? 0.80;
+
     updateScan(scan.id, {
       topicSlug: slug,
       outcome: "identified",
       source: "model",
-      confidence: 0.94,
+      confidence: candConfidence,
       severity,
     });
     toast.success(`Diagnosis set: ${targetTopic ? l(lang, targetTopic.name) : slug}`);
@@ -317,7 +319,7 @@ export function ScanResultPage() {
       crop: targetCrop,
       topicSlug: targetSlug,
       outcome: "identified",
-      confidence: Math.max(0.88, scan.confidence || 0.92),
+      confidence: scan.confidence || 0.85,
       cropMismatch: undefined,
     };
 
@@ -721,6 +723,13 @@ Note: ${note || "No specific farmer notes recorded."}
                       </span>
                       <span className="text-[10px] text-muted-foreground">Tap candidate to inspect</span>
                     </div>
+
+                    {scan.confidence < 0.70 && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                        ⚠️ Symptoms exhibit traits of multiple conditions. If this doesn't match your field signs, tap an alternative below:
+                      </p>
+                    )}
+
                     <div className="flex flex-wrap gap-1.5">
                       {scan.candidates.map((cand) => {
                         const candTopic = getTopic(scan.crop, cand.slug);
