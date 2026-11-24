@@ -1050,89 +1050,8 @@ export async function analyzeImageWithVision(
             });
           }
 
-          const isRiceBlastSpindle =
-            ((blastCoreRatio >= 0.18 && whiteCorePixels >= 500) || (whiteCorePixels >= 1200)) &&
-            (yellowHaloPixels < whiteCorePixels * 3.5 || whiteCorePixels >= 1500);
-
-          const isRiceBrownSpotLesions =
-            ((brownMarginPixels >= 1500 && blastCoreRatio < 0.15) || (brownMarginPixels >= 3500 && blastCoreRatio < 0.18)) ||
-            (yellowHaloPixels >= 2500 && blastCoreRatio < 0.12 && brownMarginPixels >= 800);
-
-          // Priority 1: Query Local Deep Learning Server if available
-          if (deepModelResult && deepModelResult.slug && deepModelResult.slug !== "unknown" && deepModelResult.confidence >= 0.35) {
-            detectedSlug = deepModelResult.slug;
-            confidence = Math.min(0.98, deepModelResult.confidence);
-            patternName = detectedSlug.replace("-", "_");
-            candidates = deepModelResult.candidates || [{ slug: detectedSlug, confidence }];
-          }
-          // Case 1: Rice Blast (Spindle lesions with greyish-white ash core and necrotic margins)
-          else if (isRiceBlastSpindle || (blastAshCorePixels > 400 && ashRatio >= 0.35) || (ashRatio >= 0.45 && blastAshCorePixels > 150) || (blastAshCorePixels > 1000)) {
-            detectedSlug = "rice-blast";
-            confidence = Math.min(0.97, Math.max(0.90, 0.86 + Math.min(0.10, Math.max(whiteCorePixels, blastAshCorePixels) / 10000)));
-            patternName = "rice_blast";
-            candidates = [
-              { slug: "rice-blast", confidence },
-              { slug: "brown-spot", confidence: Math.round((1 - confidence) * 0.7 * 100) / 100 },
-              { slug: "bacterial-leaf-blight", confidence: Math.round((1 - confidence) * 0.3 * 100) / 100 },
-            ];
-          }
-          // Case 2: Rice Brown Spot (Circular necrotic spots with yellow halos, low ash ratio)
-          else if (isRiceBrownSpotLesions || (brownSpotPixels > 300 && ashRatio < 0.20) || (brownSpotPixels > 1000 && ashRatio < 0.25) || (brownMarginPixels > 1200 && blastCoreRatio < 0.15)) {
-            detectedSlug = "brown-spot";
-            confidence = Math.min(0.97, Math.max(0.90, 0.86 + Math.min(0.10, Math.max(brownMarginPixels, brownSpotPixels) / 25000)));
-            patternName = "brown_spot";
-            candidates = [
-              { slug: "brown-spot", confidence },
-              { slug: "rice-blast", confidence: Math.round((1 - confidence) * 0.7 * 100) / 100 },
-              { slug: "bacterial-leaf-streak", confidence: Math.round((1 - confidence) * 0.3 * 100) / 100 },
-            ];
-          }
-          // Case 3: Rice Tungro Virus (Widespread orange-yellow chlorotic foliar discoloration)
-          else if (orangeTungroPixels > 2000 && orangeTungroPixels > brownSpotPixels * 2.5) {
-            detectedSlug = "tungro";
-            confidence = 0.90;
-            patternName = "tungro";
-            candidates = [
-              { slug: "tungro", confidence: 0.90 },
-              { slug: "bacterial-leaf-blight", confidence: 0.06 },
-              { slug: "brown-spot", confidence: 0.04 },
-            ];
-          }
-          // Case 4: Bacterial Leaf Blight (Wavy marginal yellow/straw stripes)
-          else if (marginLesionCount > centerLesionCount * 1.3 && chloroticStreakPixels > 800 && brownSpotPixels < 400) {
-            detectedSlug = "bacterial-leaf-blight";
-            confidence = 0.91;
-            patternName = "bacterial_leaf_blight";
-            candidates = [
-              { slug: "bacterial-leaf-blight", confidence: 0.91 },
-              { slug: "bacterial-leaf-streak", confidence: 0.06 },
-              { slug: "rice-blast", confidence: 0.03 },
-            ];
-          }
-          // Case 5: Moderate blast lesions
-          else if (blastAshCorePixels > 100 && ashRatio >= 0.30) {
-            detectedSlug = "rice-blast";
-            confidence = 0.89;
-            patternName = "rice_blast";
-            candidates = [
-              { slug: "rice-blast", confidence: 0.89 },
-              { slug: "brown-spot", confidence: 0.08 },
-              { slug: "bacterial-leaf-blight", confidence: 0.03 },
-            ];
-          }
-          // Case 6: Moderate brown spot lesions
-          else if (brownSpotPixels > 120) {
-            detectedSlug = "brown-spot";
-            confidence = 0.88;
-            patternName = "brown_spot";
-            candidates = [
-              { slug: "brown-spot", confidence: 0.88 },
-              { slug: "rice-blast", confidence: 0.08 },
-              { slug: "bacterial-leaf-streak", confidence: 0.04 },
-            ];
-          }
-          // Case 7: Clean healthy foliage
-          else if (plantPixels > 500 && healthyRatio >= 0.70 && totalLesions < 150) {
+          // Case 0: Clean healthy foliage check
+          if (plantPixels > 500 && healthyRatio >= 0.75 && totalLesions < 100) {
             return resolve({
               source: "model",
               outcome: "identified",
@@ -1148,23 +1067,105 @@ export async function analyzeImageWithVision(
               },
             });
           }
-          // Case 8: Field canopy shots / HGB ensemble fallback
+
+          const isRiceBlastSpindle =
+            (blastCoreRatio >= 0.18 && whiteCorePixels >= 500 && yellowHaloPixels < whiteCorePixels * 3.5) ||
+            (blastCoreRatio >= 0.25 && whiteCorePixels >= 1000);
+
+          const isRiceBrownSpotLesions =
+            ((brownMarginPixels >= 1500 && blastCoreRatio < 0.15) || (brownMarginPixels >= 3500 && blastCoreRatio < 0.18)) ||
+            (yellowHaloPixels >= 2500 && blastCoreRatio < 0.12 && brownMarginPixels >= 800);
+
+          // Priority 1: Query Local Deep Learning Server if available
+          if (deepModelResult && deepModelResult.slug && deepModelResult.slug !== "unknown" && deepModelResult.confidence >= 0.35) {
+            detectedSlug = deepModelResult.slug;
+            confidence = Math.min(0.98, deepModelResult.confidence);
+            patternName = detectedSlug.replace("-", "_");
+            candidates = deepModelResult.candidates || [{ slug: detectedSlug, confidence }];
+          }
+          // Priority 2: In-Browser ONNX WebAssembly Deep Neural Network (covers all 10 Paddy Doctor classes offline)
           else {
-            const riceHgbModel = await loadHgbModel("rice");
-            const riceHgbRes = riceHgbModel ? evaluateHgb(riceHgbModel, featVector) : null;
-            if (riceHgbRes && riceHgbRes.confidence >= 0.25) {
-              const sortedBlended = riceHgbRes.candidates.filter(c => matchesMode(c.slug));
-              if (sortedBlended.length > 0) {
-                detectedSlug = sortedBlended[0]!.slug;
-                confidence = Math.min(0.95, Math.max(0.78, sortedBlended[0]!.confidence));
-                candidates = sortedBlended.slice(0, 4);
-                patternName = detectedSlug.replace("-", "_");
-              } else {
+            const onnxRes = await runOnnxInference("rice", canvas);
+            if (onnxRes && onnxRes.confidence >= 0.20 && onnxRes.slug !== "unknown") {
+              const modeCandidate = onnxRes.candidates.find((c: any) => matchesMode(c.slug));
+              detectedSlug = modeCandidate ? modeCandidate.slug : onnxRes.slug;
+              confidence = modeCandidate ? Math.min(0.98, modeCandidate.confidence) : Math.min(0.98, onnxRes.confidence);
+              patternName = detectedSlug.replace("-", "_");
+              candidates = onnxRes.candidates;
+
+              // Refine Blast vs Brown Spot if the neural net predicted blast, brown-spot or downy-mildew
+              if (detectedSlug === "rice-blast" && isRiceBrownSpotLesions && !isRiceBlastSpindle) {
                 detectedSlug = "brown-spot";
-                confidence = 0.82;
+                confidence = Math.max(confidence, 0.94);
                 patternName = "brown_spot";
-                candidates = [{ slug: "brown-spot", confidence: 0.82 }];
+              } else if (detectedSlug === "downy-mildew" && isRiceBlastSpindle && brownMarginPixels >= 500) {
+                detectedSlug = "rice-blast";
+                confidence = Math.max(confidence, 0.94);
+                patternName = "rice_blast";
               }
+            }
+            // Priority 3: In-Browser Gradient Boosted Trees (HGB) Model
+            else {
+              const riceHgbModel = await loadHgbModel("rice");
+              const riceHgbRes = riceHgbModel ? evaluateHgb(riceHgbModel, featVector) : null;
+              if (riceHgbRes && riceHgbRes.confidence >= 0.25) {
+                const sortedBlended = riceHgbRes.candidates.filter(c => matchesMode(c.slug));
+                if (sortedBlended.length > 0) {
+                  detectedSlug = sortedBlended[0]!.slug;
+                  confidence = Math.min(0.95, Math.max(0.78, sortedBlended[0]!.confidence));
+                  candidates = sortedBlended.slice(0, 4);
+                  patternName = detectedSlug.replace("-", "_");
+                }
+              }
+            }
+          }
+
+          // Priority 4: Fallback Pathology Heuristics if neither deep models returned a result
+          if (!detectedSlug || detectedSlug === "unknown") {
+            if (isRiceBlastSpindle || (blastAshCorePixels > 400 && ashRatio >= 0.35) || (blastAshCorePixels > 1000)) {
+              detectedSlug = "rice-blast";
+              confidence = 0.92;
+              patternName = "rice_blast";
+              candidates = [
+                { slug: "rice-blast", confidence: 0.92 },
+                { slug: "brown-spot", confidence: 0.05 },
+                { slug: "bacterial-leaf-blight", confidence: 0.03 },
+              ];
+            } else if (isRiceBrownSpotLesions || (brownSpotPixels > 300 && ashRatio < 0.20)) {
+              detectedSlug = "brown-spot";
+              confidence = 0.92;
+              patternName = "brown_spot";
+              candidates = [
+                { slug: "brown-spot", confidence: 0.92 },
+                { slug: "rice-blast", confidence: 0.05 },
+                { slug: "bacterial-leaf-streak", confidence: 0.03 },
+              ];
+            } else if (orangeTungroPixels > 2000 && orangeTungroPixels > brownSpotPixels * 2.5) {
+              detectedSlug = "tungro";
+              confidence = 0.90;
+              patternName = "tungro";
+              candidates = [
+                { slug: "tungro", confidence: 0.90 },
+                { slug: "bacterial-leaf-blight", confidence: 0.06 },
+                { slug: "brown-spot", confidence: 0.04 },
+              ];
+            } else if (marginLesionCount > centerLesionCount * 1.3 && chloroticStreakPixels > 800) {
+              detectedSlug = "bacterial-leaf-blight";
+              confidence = 0.91;
+              patternName = "bacterial_leaf_blight";
+              candidates = [
+                { slug: "bacterial-leaf-blight", confidence: 0.91 },
+                { slug: "bacterial-leaf-streak", confidence: 0.06 },
+                { slug: "rice-blast", confidence: 0.03 },
+              ];
+            } else if (chloroticStreakPixels > 600) {
+              detectedSlug = "bacterial-leaf-streak";
+              confidence = 0.88;
+              patternName = "bacterial_leaf_streak";
+              candidates = [
+                { slug: "bacterial-leaf-streak", confidence: 0.88 },
+                { slug: "bacterial-leaf-blight", confidence: 0.08 },
+              ];
             } else {
               detectedSlug = "rice-healthy";
               confidence = 0.85;

@@ -178,13 +178,13 @@ class VisionInferenceService(private val context: Context) {
         val ratio = whiteCore.toFloat() / Math.max(1, brownMargin)
 
         // Case 1: Rice Blast (Spindle lesions with grey/white ash center)
-        if ((ratio >= 0.18f && whiteCore >= 500) || (whiteCore >= 1200)) {
+        if ((ratio >= 0.18f && whiteCore >= 500 && yellowHalo < whiteCore * 3.5f) || (ratio >= 0.25f && whiteCore >= 1000)) {
             val conf = Math.min(0.97, Math.max(0.90, 0.86 + whiteCore / 20000.0))
             return Triple("rice-blast", conf, "Spindle-shaped foliar lesions with greyish-white ash core and necrotic margins")
         }
 
         // Case 2: Brown Spot (Circular dark spots with prominent yellow halos, minimal ash core)
-        if ((brownMargin >= 1500 && ratio < 0.15f) || (brownMargin >= 3500 && ratio < 0.18f) || (yellowHalo >= 2500 && ratio < 0.12f && brownMargin >= 800)) {
+        if (((brownMargin >= 1500 && ratio < 0.15f) || (brownMargin >= 3500 && ratio < 0.18f)) || (yellowHalo >= 2500 && ratio < 0.12f && brownMargin >= 800)) {
             val conf = Math.min(0.97, Math.max(0.90, 0.86 + brownMargin / 50000.0))
             return Triple("brown-spot", conf, "Circular to oval dark brown necrotic lesions surrounded by chlorotic yellow halos")
         }
@@ -212,38 +212,47 @@ class VisionInferenceService(private val context: Context) {
             )
         }
 
-        // Domain-specific calibrated visual pathology (Rice Blast vs Brown Spot precision engine)
+        // Dedicated 10-Class Rice MobileNetV3 Model (covers all Paddy Doctor classes)
         if (crop == "rice") {
-            val (pathoSlug, pathoConf, pathoExplain) = analyzeRicePathology(bitmap)
-            if (pathoSlug != null) {
-                return DiagnosisInferenceResult(
-                    slug = pathoSlug,
-                    confidence = pathoConf,
-                    level = 4,
-                    status = "IDENTIFIED",
-                    category = "disease",
-                    explanation = pathoExplain
-                )
+            val module = riceModule
+            if (module != null) {
+                val res = runLegacyInference("rice", module, bitmap)
+                val (pathoSlug, pathoConf, pathoExplain) = analyzeRicePathology(bitmap)
+
+                // Calibrate specifically between Blast and Brown Spot when visual pathology detects strong distinguishing features
+                if (res.slug == "rice-blast" && pathoSlug == "brown-spot") {
+                    return res.copy(
+                        slug = "brown-spot",
+                        confidence = Math.max(res.confidence, pathoConf),
+                        explanation = pathoExplain
+                    )
+                } else if (res.slug == "downy-mildew" && pathoSlug == "rice-blast") {
+                    return res.copy(
+                        slug = "rice-blast",
+                        confidence = Math.max(res.confidence, pathoConf),
+                        explanation = pathoExplain
+                    )
+                }
+                return res
             }
+        }
+
+        // Dedicated 11-Class Chilli MobileNetV3 Model
+        if (crop == "chilli" && chilliModule != null) {
+            return runLegacyInference("chilli", chilliModule!!, bitmap)
         }
 
         if (hierarchicalModule != null) {
             return runHierarchicalInference(crop, bitmap)
         }
 
-        // Fallback to legacy single-head module
-        val module = if (crop == "rice") riceModule else chilliModule
-        if (module == null) {
-            return DiagnosisInferenceResult(
-                slug = null,
-                confidence = 0.20,
-                level = 1,
-                status = "MODEL_NOT_LOADED",
-                explanation = "On-device model weights not loaded for $crop"
-            )
-        }
-
-        return runLegacyInference(crop, module, bitmap)
+        return DiagnosisInferenceResult(
+            slug = null,
+            confidence = 0.20,
+            level = 1,
+            status = "MODEL_NOT_LOADED",
+            explanation = "On-device model weights not loaded for $crop"
+        )
     }
 
     private fun runHierarchicalInference(crop: String, bitmap: Bitmap): DiagnosisInferenceResult {
