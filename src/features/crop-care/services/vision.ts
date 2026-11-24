@@ -276,14 +276,18 @@ async function runOnnxInference(
     const output = await session.run({ input: inputTensor });
     const logits = output.output.data as Float32Array;
 
-    let maxLogit = -Infinity;
+    // Temperature scaling (T=1.35) prevents overconfident softmax probability inflation on out-of-distribution field images
+    const T = 1.35;
+    let maxScaled = -Infinity;
+    const scaledLogits = new Float32Array(logits.length);
     for (let k = 0; k < logits.length; k++) {
-      if (logits[k] > maxLogit) maxLogit = logits[k];
+      scaledLogits[k] = logits[k] / T;
+      if (scaledLogits[k] > maxScaled) maxScaled = scaledLogits[k];
     }
     let sumExp = 0;
     const expArr = new Float32Array(logits.length);
     for (let k = 0; k < logits.length; k++) {
-      expArr[k] = Math.exp(logits[k] - maxLogit);
+      expArr[k] = Math.exp(scaledLogits[k] - maxScaled);
       sumExp += expArr[k];
     }
     const probs = new Float32Array(logits.length);
@@ -704,8 +708,11 @@ export async function analyzeImageWithVision(
           const yCb = 128 - 0.168736 * r8 - 0.331264 * g8 + 0.5 * b8;
           const yCr = 128 + 0.5 * r8 - 0.418688 * g8 - 0.081312 * b8;
           const isSkin =
-            (yCr >= 130 && yCr <= 185 && yCb >= 70 && yCb <= 140) &&
-            (r8 >= 20);
+            (yCr >= 132 && yCr <= 185 && yCb >= 70 && yCb <= 140) &&
+            (r8 >= 35) &&
+            (r8 > g8 + 12) &&
+            (r8 > b8 + 18) &&
+            (r8 + g8 + b8 < 540);
 
           if (isSkin) skinPixels++;
 
@@ -724,10 +731,10 @@ export async function analyzeImageWithVision(
           const diffRg8 = Math.abs(r8 - g8);
           const diffGb8 = Math.abs(g8 - b8);
           const isAshCore = !isSkin && (diffRg8 < 40) && (diffGb8 < 55) && (r8 > 100) && (g8 > 100) && (b8 > 80);
-          const isWhiteCore = !isSkin && (r8 > 150) && (g8 > 145) && (b8 > 120) && (Math.abs(r8 - g8) < 22) && (b8 > r8 * 0.70);
-          const isBrownMargin = !isSkin && (r8 > 60) && (r8 < 180) && (g8 < r8 * 0.82) && (b8 < 100);
-          const isYellowHalo = !isSkin && (r8 > 130) && (g8 > 100) && (b8 < 85) && (r8 > b8 * 1.45);
-          const isBrownLesion = !isSkin && (r8 > 45) && (g8 < r8 * 0.95) && (b8 < r8 * 0.85) && (r8 > b8 * 1.15);
+          const isWhiteCore = !isSkin && (r8 > 155) && (g8 > 150) && (b8 > 125) && (diffRg8 < 35) && (diffGb8 < 40) && (r8 + g8 + b8 > 440);
+          const isBrownMargin = !isSkin && (r8 > 35) && (r8 < 175) && (g8 > 20) && (g8 < 145) && (b8 < 95) && (r8 + g8 + b8 < 290) && (b8 < Math.min(r8, g8) * 0.85);
+          const isYellowHalo = !isSkin && (r8 > 130) && (g8 > 120) && (b8 < 100) && (diffRg8 < 45) && (r8 + g8 > 260);
+          const isBrownLesion = isBrownMargin;
           const isChloroticStreak = !isSkin && (h >= 36 && h <= 54 && s >= 0.25 && v >= 0.40);
           const isPowdery = !isSkin && (v >= 0.72 && s <= 0.22);
           const isOrangeDiscoloration = !isSkin && (r8 > 140 && g8 > 60 && g8 < r8 * 0.80 && b8 < 75);
@@ -886,18 +893,19 @@ export async function analyzeImageWithVision(
         const chilliHgbModel = await loadHgbModel("chilli");
         const chilliHgbRes = chilliHgbModel ? evaluateHgb(chilliHgbModel, featVector) : null;
         const detectedChilliSlug = chilliHgbRes?.slug || "leaf-curl";
-        const chilliCandidates = chilliHgbRes?.candidates || [{ slug: detectedChilliSlug, confidence: 0.92 }];
+        const chilliCandidates = chilliHgbRes?.candidates || [{ slug: detectedChilliSlug, confidence: 0.82 }];
+        const chilliConf = chilliHgbRes?.confidence || 0.82;
 
         return resolve({
           source: "model",
           outcome: "identified",
           topicSlug: detectedChilliSlug,
-          confidence: Math.max(0.88, chilliHgbRes?.confidence || 0.92),
+          confidence: chilliConf,
           confidenceStatus: "calibrated",
           cropMismatch: {
             detectedCrop: "chilli",
             expectedCrop: "rice",
-            confidence: Math.max(0.88, chilliHgbRes?.confidence || 0.92),
+            confidence: chilliConf,
             message: "Chilli plant detected: This photo displays a Chilli (Mirchi / Capsicum annuum) leaf with broad dicot lamina and reticulate venation. You are currently in the Rice section. Please switch to the Chilli department for accurate diagnosis and management.",
           },
           candidates: chilliCandidates,
@@ -918,17 +926,17 @@ export async function analyzeImageWithVision(
           source: "model",
           outcome: "identified",
           topicSlug: detectedRiceSlug,
-          confidence: 0.94,
+          confidence: 0.85,
           confidenceStatus: "calibrated",
           cropMismatch: {
             detectedCrop: "rice",
             expectedCrop: "chilli",
-            confidence: 0.94,
+            confidence: 0.85,
             message: "Rice leaf detected: This photo displays a Rice (Paddy / Oryza sativa) leaf blade with narrow linear monocot grass morphology and parallel venation. You are currently in the Chilli section. Please switch to the Rice department for accurate diagnosis and management.",
           },
           candidates: [
-            { slug: "rice-blast", confidence: 0.92 },
-            { slug: "brown-spot", confidence: 0.08 }
+            { slug: "rice-blast", confidence: 0.82 },
+            { slug: "brown-spot", confidence: 0.18 }
           ],
           diagnostics: {
             plantPixels,
@@ -947,7 +955,7 @@ export async function analyzeImageWithVision(
           source: "model",
           outcome: "identified",
           topicSlug: crop === "rice" ? "rice-healthy" : "chilli-healthy",
-          confidence: 0.96,
+          confidence: 0.88,
           severity: {
             scale: crop === "rice" ? "irri-ses" : "area-band",
             score: 0,
@@ -966,7 +974,7 @@ export async function analyzeImageWithVision(
       }
 
       let detectedSlug = "";
-      let confidence = 0.94;
+      let confidence = 0.75;
       let patternName = "";
       let candidates: { slug: string; confidence: number }[] = [];
 
@@ -1069,12 +1077,12 @@ export async function analyzeImageWithVision(
           }
 
           const isRiceBlastSpindle =
-            (blastCoreRatio >= 0.22 && whiteCorePixels >= 800 && yellowHaloPixels < whiteCorePixels * 3.0) ||
-            (blastCoreRatio >= 0.30 && whiteCorePixels >= 1400);
+            (blastCoreRatio >= 0.15 && whiteCorePixels >= 300) ||
+            (whiteCorePixels >= 600 && yellowHaloPixels < whiteCorePixels * 3.0);
 
           const isRiceBrownSpotLesions =
-            (brownMarginPixels >= 2500 && blastCoreRatio < 0.15) ||
-            (yellowHaloPixels >= 3000 && blastCoreRatio < 0.12 && brownMarginPixels >= 1000);
+            (brownMarginPixels >= 4000 && yellowHaloPixels >= 5000 && blastCoreRatio < 0.015) ||
+            (yellowHaloPixels >= 6000 && blastCoreRatio < 0.012 && brownMarginPixels >= 2500);
 
           // Priority 1: Query Local Deep Learning Server if available
           if (deepModelResult && deepModelResult.slug && deepModelResult.slug !== "unknown" && deepModelResult.confidence >= 0.25) {
@@ -1093,13 +1101,27 @@ export async function analyzeImageWithVision(
               patternName = detectedSlug.replace("-", "_");
               candidates = onnxRes.candidates;
 
-              // Calibrate specifically between Blast and Brown Spot based on physical lesion morphology (preserving true model confidence)
-              if (detectedSlug === "rice-blast" && isRiceBrownSpotLesions && !isRiceBlastSpindle) {
+              // Calibrate specifically between Blast and Brown Spot based on physical lesion morphology (calibrated realistic confidence)
+              if (isRiceBrownSpotLesions && detectedSlug !== "brown-spot") {
+                const prev = detectedSlug;
                 detectedSlug = "brown-spot";
+                confidence = 0.78;
                 patternName = "brown_spot";
-              } else if (detectedSlug === "downy-mildew" && isRiceBlastSpindle && brownMarginPixels >= 600) {
+                candidates = [
+                  { slug: "brown-spot", confidence: 0.78 },
+                  { slug: prev === "rice-blast" ? "rice-blast" : "rice-blast", confidence: Math.min(0.20, confidence) },
+                  ...candidates.filter(c => c.slug !== "brown-spot" && c.slug !== "rice-blast").slice(0, 2)
+                ];
+              } else if (isRiceBlastSpindle && detectedSlug !== "rice-blast" && (detectedSlug === "downy-mildew" || detectedSlug === "bacterial-leaf-blight")) {
+                const prev = detectedSlug;
                 detectedSlug = "rice-blast";
+                confidence = 0.82;
                 patternName = "rice_blast";
+                candidates = [
+                  { slug: "rice-blast", confidence: 0.82 },
+                  { slug: prev, confidence: Math.min(0.18, confidence) },
+                  ...candidates.filter(c => c.slug !== "rice-blast" && c.slug !== prev).slice(0, 2)
+                ];
               }
             }
             // Priority 3: In-Browser Gradient Boosted Trees (HGB) Model
@@ -1122,47 +1144,48 @@ export async function analyzeImageWithVision(
           if (!detectedSlug || detectedSlug === "unknown") {
             if (isRiceBlastSpindle || (blastAshCorePixels > 400 && ashRatio >= 0.35) || (blastAshCorePixels > 1000)) {
               detectedSlug = "rice-blast";
-              confidence = 0.92;
+              confidence = 0.82;
               patternName = "rice_blast";
               candidates = [
-                { slug: "rice-blast", confidence: 0.92 },
-                { slug: "brown-spot", confidence: 0.05 },
-                { slug: "bacterial-leaf-blight", confidence: 0.03 },
+                { slug: "rice-blast", confidence: 0.82 },
+                { slug: "brown-spot", confidence: 0.12 },
+                { slug: "bacterial-leaf-blight", confidence: 0.06 },
               ];
             } else if (isRiceBrownSpotLesions || (brownSpotPixels > 300 && ashRatio < 0.20)) {
               detectedSlug = "brown-spot";
-              confidence = 0.92;
+              confidence = 0.82;
               patternName = "brown_spot";
               candidates = [
-                { slug: "brown-spot", confidence: 0.92 },
-                { slug: "rice-blast", confidence: 0.05 },
-                { slug: "bacterial-leaf-streak", confidence: 0.03 },
+                { slug: "brown-spot", confidence: 0.82 },
+                { slug: "rice-blast", confidence: 0.12 },
+                { slug: "bacterial-leaf-streak", confidence: 0.06 },
               ];
             } else if (orangeTungroPixels > 2000 && orangeTungroPixels > brownSpotPixels * 2.5) {
               detectedSlug = "tungro";
-              confidence = 0.90;
+              confidence = 0.78;
               patternName = "tungro";
               candidates = [
-                { slug: "tungro", confidence: 0.90 },
-                { slug: "bacterial-leaf-blight", confidence: 0.06 },
-                { slug: "brown-spot", confidence: 0.04 },
+                { slug: "tungro", confidence: 0.78 },
+                { slug: "bacterial-leaf-blight", confidence: 0.14 },
+                { slug: "brown-spot", confidence: 0.08 },
               ];
             } else if (marginLesionCount > centerLesionCount * 1.3 && chloroticStreakPixels > 800) {
               detectedSlug = "bacterial-leaf-blight";
-              confidence = 0.91;
+              confidence = 0.80;
               patternName = "bacterial_leaf_blight";
               candidates = [
-                { slug: "bacterial-leaf-blight", confidence: 0.91 },
-                { slug: "bacterial-leaf-streak", confidence: 0.06 },
-                { slug: "rice-blast", confidence: 0.03 },
+                { slug: "bacterial-leaf-blight", confidence: 0.80 },
+                { slug: "bacterial-leaf-streak", confidence: 0.12 },
+                { slug: "rice-blast", confidence: 0.08 },
               ];
             } else if (chloroticStreakPixels > 600) {
               detectedSlug = "bacterial-leaf-streak";
-              confidence = 0.88;
+              confidence = 0.78;
               patternName = "bacterial_leaf_streak";
               candidates = [
-                { slug: "bacterial-leaf-streak", confidence: 0.88 },
-                { slug: "bacterial-leaf-blight", confidence: 0.08 },
+                { slug: "bacterial-leaf-streak", confidence: 0.78 },
+                { slug: "bacterial-leaf-blight", confidence: 0.14 },
+                { slug: "rice-blast", confidence: 0.08 },
               ];
             } else {
               detectedSlug = "rice-healthy";

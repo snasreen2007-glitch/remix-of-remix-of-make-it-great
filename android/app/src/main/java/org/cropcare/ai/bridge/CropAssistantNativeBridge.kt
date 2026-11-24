@@ -216,6 +216,15 @@ class CropAssistantNativeBridge(
                     response.put("explanation", diagResult.explanation)
                 }
 
+                val candArray = JSONArray()
+                for ((cSlug, cConf) in diagResult.candidates) {
+                    val candObj = JSONObject()
+                    candObj.put("slug", cSlug)
+                    candObj.put("confidence", cConf)
+                    candArray.put(candObj)
+                }
+                response.put("candidates", candArray)
+
                 // Run computer vision severity calculation if it's a disease
                 if (diagResult.category == "disease") {
                     val severity = severityService.calculateSeverity(crop, slug, bitmap)

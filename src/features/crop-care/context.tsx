@@ -71,7 +71,7 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
           source: "model" as const,
           outcome: "identified" as const,
           topicSlug: slug,
-          confidence: s.confidence ?? 0.94,
+          confidence: s.confidence ?? 0.75,
           severity:
             s.severity ??
             (s.crop === "rice"
@@ -269,8 +269,8 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
       crop: ctx.crop ?? "rice",
       predictedDiseaseOrPest: ctx.name || ctx.slug || "Crop condition",
       topicSlug: ctx.slug || "unknown",
-      topPredictions: [{ slug: ctx.slug || "unknown", name: ctx.name || ctx.slug || "Condition", confidence: ctx.confidence ?? 0.90 }],
-      confidence: ctx.confidence ?? 0.90,
+      topPredictions: [{ slug: ctx.slug || "unknown", name: ctx.name || ctx.slug || "Condition", confidence: ctx.confidence ?? 0.75 }],
+      confidence: ctx.confidence ?? 0.75,
       confidenceCalibrationStatus: (ctx.confidence && ctx.confidence > 0.8) ? "high" : "moderate",
       imageQualityStatus: "good",
       visibleSymptomsDetected: ctx.visibleEvidence && ctx.visibleEvidence.length > 0 ? ctx.visibleEvidence : [ctx.slug || "foliar symptoms"],
@@ -280,7 +280,7 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
       measurementMethod: (ctx.severityMethod || (ctx.crop === "rice" ? "irri-ses" : "opencv-foliar-mask")) as any,
       diagnosisTimestamp: Date.now(),
       modelVersion: "1.0 (Real-Field Hierarchical Vision)",
-      isUncertainOrOOD: (ctx.confidence ?? 0.90) < 0.40,
+      isUncertainOrOOD: (ctx.confidence ?? 0.75) < 0.40,
     } : null;
 
     // 2. Online execution via ai-router with guaranteed fast fallback to grounded Llama engine

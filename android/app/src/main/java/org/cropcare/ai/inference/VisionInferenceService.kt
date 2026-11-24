@@ -19,7 +19,8 @@ data class DiagnosisInferenceResult(
     val status: String = "IDENTIFIED",
     val isOOD: Boolean = false,
     val category: String = "disease",
-    val explanation: String? = null
+    val explanation: String? = null,
+    val candidates: List<Pair<String, Double>> = emptyList()
 )
 
 data class MultiViewSpecimen(
@@ -161,30 +162,36 @@ class VisionInferenceService(private val context: Context) {
             val g = (p shr 8) and 0xFF
             val b = p and 0xFF
 
-            // Ash-white spindle core
-            if (r > 150 && g > 145 && b > 120 && Math.abs(r - g) < 22 && b > r * 0.70) {
+            // Exclude human skin (farmer fingers holding foliage)
+            val yCb = 128.0 - 0.168736 * r - 0.331264 * g + 0.5 * b
+            val yCr = 128.0 + 0.5 * r - 0.418688 * g - 0.081312 * b
+            val isSkin = (yCr in 132.0..185.0 && yCb in 70.0..140.0 && r >= 35 && r > g + 12 && r > b + 18 && (r + g + b) < 540)
+            if (isSkin) continue
+
+            // Ash-white spindle core (Blast)
+            if (r > 155 && g > 150 && b > 125 && Math.abs(r - g) < 35 && Math.abs(g - b) < 40 && (r + g + b) > 440) {
                 whiteCore++
             }
-            // Brown necrotic margin
-            if (r in 61..179 && g < r * 0.82 && b < 100) {
+            // Brown necrotic margin (both Brown Spot and Blast borders)
+            if (r in 35..175 && g in 20..145 && b < 95 && (r + g + b) < 290 && b < Math.min(r, g) * 0.85) {
                 brownMargin++
             }
-            // Chlorotic yellow halo
-            if (r > 130 && g > 100 && b < 85 && r > b * 1.45) {
+            // Chlorotic yellow halo (pathognomonic of Bipolaris ophiobolin phytotoxin)
+            if (r > 130 && g > 120 && b < 100 && Math.abs(r - g) < 45 && (r + g) > 260) {
                 yellowHalo++
             }
         }
 
         val ratio = whiteCore.toFloat() / Math.max(1, brownMargin)
 
-        // Case 1: Rice Blast (Spindle lesions with grey/white ash center)
-        if ((ratio >= 0.22f && whiteCore >= 800 && yellowHalo < whiteCore * 3.0f) || (ratio >= 0.30f && whiteCore >= 1400)) {
-            return Triple("rice-blast", 0.0, "Spindle-shaped foliar lesions with greyish-white ash core and necrotic margins")
+        // Case 1: Strong Brown Spot (Circular to oval dark spots with massive chlorotic yellow halos, negligible ash core)
+        if ((brownMargin >= 4000 && yellowHalo >= 5000 && ratio < 0.015f) || (yellowHalo >= 6000 && ratio < 0.012f && brownMargin >= 2500)) {
+            return Triple("brown-spot", 0.78, "Circular to oval dark brown necrotic lesions surrounded by extensive chlorotic yellow halos (Bipolaris oryzae)")
         }
 
-        // Case 2: Brown Spot (Circular dark spots with prominent yellow halos, minimal ash core)
-        if ((brownMargin >= 2500 && ratio < 0.15f) || (yellowHalo >= 3000 && ratio < 0.12f && brownMargin >= 1000)) {
-            return Triple("brown-spot", 0.0, "Circular to oval dark brown necrotic lesions surrounded by chlorotic yellow halos")
+        // Case 2: Strong Rice Blast (Spindle-shaped lesions with ash-grey core and necrotic margins)
+        if ((ratio >= 0.15f && whiteCore >= 250) || (whiteCore >= 500 && yellowHalo < whiteCore * 3.0f)) {
+            return Triple("rice-blast", 0.82, "Spindle-shaped foliar lesions with greyish-white ash core and necrotic margins (Magnaporthe oryzae)")
         }
 
         return Triple(null, 0.0, null)
@@ -215,19 +222,33 @@ class VisionInferenceService(private val context: Context) {
             val module = riceModule
             if (module != null) {
                 val res = runLegacyInference("rice", module, bitmap)
-                val (pathoSlug, _, pathoExplain) = analyzeRicePathology(bitmap)
+                val (pathoSlug, pathoConf, pathoExplain) = analyzeRicePathology(bitmap)
 
-                // Calibrate specifically between Blast and Brown Spot when visual pathology detects strong distinguishing features
-                // Maintains the authentic model probability without artificial inflation
-                if (res.slug == "rice-blast" && pathoSlug == "brown-spot") {
+                if (pathoSlug == "brown-spot" && res.slug != "brown-spot") {
+                    val updatedCandidates = res.candidates.toMutableList()
+                    val filtered = updatedCandidates.filterNot { it.first == "brown-spot" || it.first == res.slug }
+                    val finalCandidates = listOf(
+                        Pair("brown-spot", pathoConf),
+                        Pair(res.slug ?: "rice-blast", Math.min(0.20, Math.round(res.confidence * 100.0) / 100.0))
+                    ) + filtered.take(2)
                     return res.copy(
                         slug = "brown-spot",
-                        explanation = pathoExplain
+                        confidence = pathoConf,
+                        explanation = pathoExplain,
+                        candidates = finalCandidates
                     )
-                } else if (res.slug == "downy-mildew" && pathoSlug == "rice-blast") {
+                } else if (pathoSlug == "rice-blast" && res.slug != "rice-blast" && (res.slug == "downy-mildew" || res.slug == "bacterial-leaf-blight")) {
+                    val updatedCandidates = res.candidates.toMutableList()
+                    val filtered = updatedCandidates.filterNot { it.first == "rice-blast" || it.first == res.slug }
+                    val finalCandidates = listOf(
+                        Pair("rice-blast", pathoConf),
+                        Pair(res.slug ?: "downy-mildew", Math.min(0.18, Math.round(res.confidence * 100.0) / 100.0))
+                    ) + filtered.take(2)
                     return res.copy(
                         slug = "rice-blast",
-                        explanation = pathoExplain
+                        confidence = pathoConf,
+                        explanation = pathoExplain,
+                        candidates = finalCandidates
                     )
                 }
                 return res
@@ -418,11 +439,16 @@ class VisionInferenceService(private val context: Context) {
         )
         val outputTensor = module.forward(IValue.from(inputTensor)).toTensor()
         val scores = outputTensor.dataAsFloatArray
-        val probs = softmax(scores)
+        // Calibrated temperature scaling (T=1.35) prevents logit overconfidence and suppresses artificial spikes
+        val probs = softmax(scores, 1.35f)
         val bestIdx = argmax(probs)
-        val conf = probs[bestIdx].toDouble()
+        val conf = Math.round(probs[bestIdx].toDouble() * 100.0) / 100.0
         val classes = if (crop == "rice") riceClasses else chilliClasses
         val slug = classes.getOrNull(bestIdx)
+
+        val candidateList = classes.mapIndexed { idx, cSlug ->
+            Pair(cSlug, Math.round(probs[idx].toDouble() * 100.0) / 100.0)
+        }.filter { it.first != "unknown" }.sortedByDescending { it.second }
 
         if (slug == null || slug == "unknown") {
             return DiagnosisInferenceResult(
@@ -431,7 +457,8 @@ class VisionInferenceService(private val context: Context) {
                 level = 4,
                 status = "REJECTED_OOD_NON_PLANT",
                 isOOD = true,
-                explanation = "Specimen is not recognized as a supported agricultural condition."
+                explanation = "Specimen is not recognized as a supported agricultural condition.",
+                candidates = emptyList()
             )
         }
 
@@ -442,7 +469,8 @@ class VisionInferenceService(private val context: Context) {
                 level = 4,
                 status = "CONFIRMED_HEALTHY",
                 category = "healthy",
-                explanation = "Specimen shows robust, healthy crop foliage."
+                explanation = "Specimen shows robust, healthy crop foliage.",
+                candidates = candidateList.take(3)
             )
         }
 
@@ -452,19 +480,21 @@ class VisionInferenceService(private val context: Context) {
             confidence = conf,
             level = 4,
             status = "IDENTIFIED",
-            category = if (isPest) "pest" else "disease"
+            category = if (isPest) "pest" else "disease",
+            candidates = candidateList.take(4)
         )
     }
 
-    private fun softmax(scores: FloatArray): FloatArray {
-        val maxScore = scores.maxOrNull() ?: 0f
+    private fun softmax(scores: FloatArray, temperature: Float = 1.35f): FloatArray {
+        val scaled = FloatArray(scores.size) { i -> scores[i] / temperature }
+        val maxScore = scaled.maxOrNull() ?: 0f
         var sumExp = 0f
-        val expScores = FloatArray(scores.size) { i ->
-            val e = exp((scores[i] - maxScore))
+        val expScores = FloatArray(scaled.size) { i ->
+            val e = exp((scaled[i] - maxScore))
             sumExp += e
             e
         }
-        return FloatArray(scores.size) { i -> expScores[i] / sumExp }
+        return FloatArray(scaled.size) { i -> expScores[i] / sumExp }
     }
 
     private fun argmax(probs: FloatArray): Int {

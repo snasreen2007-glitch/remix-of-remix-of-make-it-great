@@ -110,12 +110,13 @@ export const diagnosisService: DiagnosisService = {
     if (bridge) {
       try {
         const result = await bridge.diagnose({ crop, mode, imageDataUrl: image });
-        if (result.slug && result.confidence >= 0.5) {
+        if (result.slug && result.confidence >= 0.40) {
           return {
             source: "model",
             outcome: "identified",
             topicSlug: result.slug,
             confidence: result.confidence,
+            candidates: result.candidates,
             ...(result.severity ? { severity: result.severity } : {}),
           };
         }
