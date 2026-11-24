@@ -253,7 +253,7 @@ class CropAssistantNativeBridge(
     fun askSync(payloadJson: String): String {
         return try {
             val input = JSONObject(payloadJson)
-            val question = input.getString("question")
+            val question = input.optString("question", "")
             val lang = input.optString("lang", "en")
             val context = input.optString("context", "")
 
@@ -263,16 +263,9 @@ class CropAssistantNativeBridge(
                 return safetyResult.refusalMessage
             }
 
-            // 2. Format with Llama 3.2 Instruct prompt structure
-            val systemPrompt = when (lang) {
-                "te" -> "మీరు పరికరంలోని Llama 3.2 వ్యవసాయ సహాయకుడు (1B Instruct). అధికారిక పరిశోధనా రికార్డుల ఆధారంగా రైతుకు స్పష్టమైన సమాధానాన్ని తెలుగులో అందించండి."
-                "hi" -> "आप ऑन-डिवाइस Llama 3.2 कृषि विशेषज्ञ (1B Instruct) हैं। आधिकारिक कृषि अनुसंधान के आधार पर किसान को व्यावहारिक समाधान प्रदान करें।"
-                else -> "You are the on-device Llama 3.2 Agricultural Assistant (1B Instruct). Ground answers in verified agronomic records and provide actionable non-hazardous advice."
-            }
-            val llamaPrompt = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n$systemPrompt<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n$question\n[Context: $context]<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
-
-            // 3. Generate response using Llama on-device engine
-            val answer = llamaService.generateResponse(llamaPrompt, lang)
+            // 2. Generate response using Llama on-device engine
+            val queryWithContext = if (context.isNotBlank()) "$question $context" else question
+            val answer = llamaService.generateResponse(queryWithContext, lang)
             safetyService.validateResponse(answer, lang)
         } catch (e: Exception) {
             "An error occurred while processing the inquiry."

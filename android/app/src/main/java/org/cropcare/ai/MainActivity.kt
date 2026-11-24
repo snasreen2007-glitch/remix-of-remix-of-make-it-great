@@ -87,21 +87,28 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         nativeBridge = CropAssistantNativeBridge(this, webView)
 
-        // Ensure status bar, navigation bar, and camera cutouts are fitted safely across Android 8 through 15
+        // Ensure edge-to-edge drawing so status bar and navigation bar fit safely without duplicate padding
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         val rootLayout = findViewById<FrameLayout>(R.id.rootLayout)
-        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, windowInsets ->
-            val insets = windowInsets.getInsets(
+        rootLayout.setPadding(0, 0, 0, 0)
+
+        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { _, windowInsets ->
+            val systemBars = windowInsets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
-            view.setPadding(insets.left, insets.top, insets.right, insets.bottom)
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
 
             val density = resources.displayMetrics.density
-            val topDp = (insets.top / density).toInt()
-            val bottomDp = (insets.bottom / density).toInt()
+            val topDp = (systemBars.top / density).toInt()
+            val bottomDp = if (ime.bottom > 0) 0 else (systemBars.bottom / density).toInt()
+            val imeDp = (ime.bottom / density).toInt()
+
             webView.post {
                 webView.evaluateJavascript(
                     "document.documentElement.style.setProperty('--sat', '${topDp}px');" +
-                    "document.documentElement.style.setProperty('--sab', '${bottomDp}px');",
+                    "document.documentElement.style.setProperty('--sab', '${bottomDp}px');" +
+                    "document.documentElement.style.setProperty('--ime', '${imeDp}px');",
                     null
                 )
             }

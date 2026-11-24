@@ -7,6 +7,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronUp,
   Copy,
@@ -733,12 +734,19 @@ export function AssistantPage() {
         <header
           className={cn(
             "flex shrink-0 items-center justify-between border-b border-line bg-card/90 px-3 sm:px-6 backdrop-blur-md z-10",
-            isFullscreen
-              ? "pt-[max(0px,env(safe-area-inset-top))] h-[calc(3.5rem+max(0px,env(safe-area-inset-top)))]"
-              : "h-12 sm:h-14"
+            "pt-[max(0px,env(safe-area-inset-top),var(--sat,0px))] h-[calc(3.25rem+max(0px,env(safe-area-inset-top),var(--sat,0px)))] sm:h-14 sm:pt-0"
           )}
         >
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            {/* Back button to Home (mobile) */}
+            <Link
+              to="/"
+              className="grid size-8 sm:size-9 place-items-center rounded-xl border border-line bg-surface text-muted-foreground hover:text-foreground transition-all active:scale-95 lg:hidden"
+              title="Back to Home"
+            >
+              <ChevronLeft className="size-4 sm:size-5" />
+            </Link>
+
             {/* Sidebar toggle button (desktop) */}
             <button
               type="button"
@@ -1202,8 +1210,7 @@ export function AssistantPage() {
             ========================================================================= */}
         <div
           className={cn(
-            "shrink-0 border-t border-line bg-card/95 p-2.5 sm:p-4 backdrop-blur-md",
-            isFullscreen && "pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+            "shrink-0 border-t border-line bg-card/95 p-2.5 sm:p-4 backdrop-blur-md pb-[max(0.75rem,env(safe-area-inset-bottom),var(--sab,0px))]"
           )}
         >
           <div className="max-w-3xl mx-auto w-full space-y-2">

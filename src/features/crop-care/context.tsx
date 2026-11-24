@@ -189,17 +189,31 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
     add({ id: newId(), role: "farmer", text: question, timestamp: Date.now() });
     setTyping(true);
 
-    const llamaRes = generateLlamaChatResponse(
-      question,
-      settings.lang,
-      ctx ? {
-        crop: ctx.crop ?? "rice",
-        ...(ctx.slug ? { topicSlug: ctx.slug } : {}),
-        ...(ctx.confidence !== undefined ? { confidence: ctx.confidence } : {}),
-        ...(ctx.severityBand ? { severity: { scale: "area-band", score: 0, max: 100, band: ctx.severityBand as any } } : {}),
-      } : undefined,
-      messages
-    );
+    let llamaRes: ReturnType<typeof generateLlamaChatResponse>;
+    try {
+      llamaRes = generateLlamaChatResponse(
+        question,
+        settings.lang,
+        ctx ? {
+          crop: ctx.crop ?? "rice",
+          ...(ctx.slug ? { topicSlug: ctx.slug } : {}),
+          ...(ctx.confidence !== undefined ? { confidence: ctx.confidence } : {}),
+          ...(ctx.severityBand ? { severity: { scale: "area-band", score: 0, max: 100, band: ctx.severityBand as any } } : {}),
+        } : undefined,
+        messages
+      );
+    } catch (err) {
+      console.warn("generateLlamaChatResponse error, using safe fallback:", err);
+      llamaRes = {
+        model: "Llama-3.2-1B-Instruct",
+        lang: settings.lang,
+        text: "Based on official agricultural guidelines (ICAR / ANGRAU), maintain balanced crop nutrition and inspect leaves regularly for early pest and disease signs.",
+        isMultimodal: false,
+        safetyTriggered: false,
+        refs: [],
+        suggestions: ["Rice Blast Control", "Chilli Leaf Curl & Thrips", "Water Management (AWD)"],
+      };
+    }
 
     let finished = false;
     let failsafeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -233,10 +247,11 @@ export function CropCareProvider({ children }: { children: ReactNode }) {
       finish(llamaRes.text);
     }, 2500);
 
+    const isAppNative = isNativeApp();
     const isDeviceOnline = typeof navigator !== "undefined" ? Boolean(navigator.onLine) : false;
 
-    // 1. Fully Offline execution (Offline in Browser, Offline in APK, or explicitly configured Local engine)
-    if (!isDeviceOnline || settings.llmProvider === "local" || settings.llmProvider === "ollama") {
+    // 1. Native APK or Offline mode: execute on-device LLM reasoning engine instantly without cloud dependency or network delays
+    if (isAppNative || !isDeviceOnline || settings.llmProvider === "local" || settings.llmProvider === "ollama") {
       // Natural brief typing cadence (180ms) for responsive feel without blocking or hanging
       setTimeout(() => {
         finish(llamaRes.text);

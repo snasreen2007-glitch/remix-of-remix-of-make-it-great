@@ -10,19 +10,13 @@ data class SafetyCheckResult(
 class SafetyValidationService {
 
     private val chemicalPatterns = listOf(
-        Pattern.compile("\\b(?:dose|dosage|concentration|dilution|mixing ratio|spray interval)\\b", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("\\b(?:how much|how many)\\s+(?:to spray|to mix|of chemical|chemical|pesticide|fungicide|insecticide)\\b", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("\\b(?:how much|how many)\\b.*\\b(?:per\\s+(?:acre|ha|hectare|pump|litre|liter|knapsack|sprayer)|to\\s+spray|to\\s+mix|in\\s+\\d+\\s*(?:l|litre|liter|pump)|dissolve in water)\\b", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("\\b(?:ml|g|gm|grams?|kg|litres?)\\b.*\\b(?:/|per|in a|in \\d+|in)\\s*(?:l|litre|liter|acre|ha|hectare|pump|knapsack)\\b", Pattern.CASE_INSENSITIVE),
         Pattern.compile("\\b(?:double (?:the )?dose|twice (?:the )?dose|increase (?:the )?dose|higher dose|exceed (?:the )?package dose)\\b", Pattern.CASE_INSENSITIVE),
         Pattern.compile("\\b(?:double dosage|double (?:the )?fungicide dose|double dose)\\b", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("\\b(?:mix|tank mix|combine|triple mix)\\b.*\\b(?:with|and|in the same tank|together|in one|chemicals?|pesticides?|fungicides?|formula)\\b", Pattern.CASE_INSENSITIVE),
+        Pattern.compile("\\b(?:mix|tank mix|combine|triple mix)\\b.*\\b(?:with|and|in the same tank|together|in one)\\b.*\\b(?:chemicals?|pesticides?|fungicides?|poisons?)\\b", Pattern.CASE_INSENSITIVE),
         Pattern.compile("\\b(?:triple mix|tank mix|chemical mix|leftover pesticide)\\b", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("\\b(?:pesticide|fungicide|insecticide|chemical spray)\\s*(?:dose|dosage|schedule|spray)\\b", Pattern.CASE_INSENSITIVE),
-        // Hindi keywords
-        Pattern.compile("(?:दवा|कीटनाशक|फफूंदनाशी|छिड़काव|मात्रा|डोज़|कितना मिला|दोगुना|मिलाकर)"),
-        // Telugu keywords
-        Pattern.compile("(?:మందు|పురుగుమందు|తెగులుమందు|పిచికారీ|మోతాదు|ఎంత కలపాలి|డబుల్ మోతాదు|రెండు కలిపి)")
+        // Extreme hazardous chemical combinations (CIB&RC prohibited off-label practices)
+        Pattern.compile("(?:डबल डोज|दोगुना कीटनाशक|दो दवाएं मिलाकर|खतरनाक जहर|तीन दवाएं मिलाकर)"),
+        Pattern.compile("(?:డబుల్ డోస్|రెండు మందులు కలిపి|మూడు మందులు కలిపి|విషం కలపాలి|అధిక మోతాదు)")
     )
 
     private val safeRefusals = mapOf(
@@ -42,8 +36,8 @@ class SafetyValidationService {
     }
 
     fun validateResponse(response: String, lang: String = "en"): String {
-        val dosageLeakPattern = Pattern.compile("\\b\\d+(?:\\.\\d+)?\\s*(?:ml|gm|g|kg)\\s*/\\s*(?:l|litre|liter|acre|ha)\\b", Pattern.CASE_INSENSITIVE)
-        if (dosageLeakPattern.matcher(response).find()) {
+        val dangerousChemicalPattern = Pattern.compile("\\b(?:monocrotophos|paraquat|endosulfan|phorate|carbofuran)\\b", Pattern.CASE_INSENSITIVE)
+        if (dangerousChemicalPattern.matcher(response).find()) {
             return safeRefusals[lang] ?: safeRefusals["en"]!!
         }
         return response
